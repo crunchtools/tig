@@ -1,20 +1,46 @@
 apiVersion: 1
 
-# The address comes from ALERT_EMAIL in grafana.env (constitution XVII: no
-# addresses in a public repo).
+# Trend alerts go where the Nagios alerts go: to the on-call agent, through the
+# MCP gateway's alert ingress. There is no email path on the deploy host.
+#
+# The ingress URL embeds its own token and comes from ALERT_WEBHOOK_URL in
+# grafana.env (constitution XVII: nothing identifying in a public repo).
+#
+# The payload template is self-contained rather than a named notification
+# template, so Grafana's contact-point test renders exactly what a real alert
+# sends. Grafana expands $NAME in this file as an environment variable, so the
+# template must not use Go template variables ($x := ...).
+
 contactPoints:
   - orgId: 1
-    name: ops-email
+    name: agent-webhook
     receivers:
-      - uid: ops-email
-        type: email
+      - uid: agent-webhook
+        type: webhook
+        # The agent does not need to be told that a trend flattened out.
+        disableResolveMessage: true
         settings:
-          addresses: $ALERT_EMAIL
-          singleEmail: true
+          url: $ALERT_WEBHOOK_URL
+          httpMethod: POST
+          payload:
+            template: |-
+              {{ coll.Dict
+                   "prompt" (print `[GRAFANA TREND WARNING - NOT AN OUTAGE] Nothing is down. A trend alert says a resource is on course to run out. Do NOT run the incident-response runbook, and do NOT restart, stop or change anything. Investigate only: use the grafana query_influxdb tool (datasource uid "influxdb", bucket "telegraf") to confirm the trend and find what is growing. Then tell Scott on Matrix what is growing, how fast, and roughly when it runs out. If the trend is not real, say so in one line. Findings: ` (tmpl.Inline `{{ range .Alerts.Firing }}{{ .Labels.alertname }}: {{ .Annotations.summary }} {{ end }}` .))
+                   "host" "grafana"
+                   "service" .CommonLabels.alertname
+                   "state" "WARNING"
+                   "output" (tmpl.Inline `{{ range .Alerts.Firing }}{{ .Labels.alertname }}: {{ .Annotations.summary }} {{ end }}` .)
+                   "type" "TREND"
+                 | data.ToJSON }}
+
+# The first release shipped an email contact point that could never deliver.
+deleteContactPoints:
+  - orgId: 1
+    uid: ops-email
 
 policies:
   - orgId: 1
-    receiver: ops-email
+    receiver: agent-webhook
     group_by: [alertname]
     group_wait: 1m
     group_interval: 10m

@@ -57,7 +57,7 @@ wait_for() {
 }
 
 cleanup() {
-    $RUNTIME rm -f tig-test-influxdb tig-test-grafana tig-test-mcp >/dev/null 2>&1 || true
+    $RUNTIME rm -f tig-test-influxdb tig-test-grafana tig-test-mcp tig-test-sink >/dev/null 2>&1 || true
     $RUNTIME network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -188,7 +188,7 @@ check "fd walker data reached influxdb" \
 $RUNTIME run -d --name tig-test-grafana --network "$NET" \
     --user 1502:1502 --tmpfs /var/lib/grafana:exec,uid=1502,gid=1502 \
     -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=test-password-123 \
-    -e INFLUXDB_TOKEN="$READ_TOKEN" -e ALERT_EMAIL=ops@example.com \
+    -e INFLUXDB_TOKEN="$READ_TOKEN" -e ALERT_WEBHOOK_URL=http://alert-sink:9000/alert \
     -v "$REPO/deploy/grafana:/etc/grafana:ro" \
     "$IMAGE" grafana >/dev/null
 
@@ -216,6 +216,61 @@ check "datasource reaches influxdb"           wait_for "datasource health" datas
 check "no other plugin backend is running"    one_plugin_backend
 check "four dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
+
+echo "=== Alert webhook (shipped contact point, sample alert) ==="
+
+# A sink stands in for the agent's alert ingress. Grafana's contact-point test
+# renders the payload template from the provisioned contact point and POSTs it,
+# so this checks the template that ships, not a copy.
+$RUNTIME run -d --name tig-test-sink --network "$NET" --network-alias alert-sink \
+    -v "$REPO/tests:/tests:ro" --entrypoint python3 "$IMAGE" /tests/webhook_sink.py 9000 >/dev/null
+
+send_sample_alert() {
+    $RUNTIME run --rm --network "$NET" -v "$REPO:/repo:ro" --entrypoint python3 "$IMAGE" -c '
+import base64, json, re, urllib.request
+text = open("/repo/deploy/grafana/provisioning/alerting/contact-points.yaml").read()
+# The payload template is the block scalar under "template: |-"; read it
+# without a YAML library, which the image does not carry.
+block = re.search(r"template: \|-\n((?:[ ]{14}.*\n|\n)+)", text).group(1)
+template = "\n".join(line[14:] for line in block.rstrip("\n").split("\n"))
+body = {
+    "alert": {
+        "labels": {"alertname": "Disk fills within 7 days", "path": "/var"},
+        "annotations": {"summary": "/var is full in under 7 days."},
+    },
+    "integration": {
+        "uid": "agent-webhook", "type": "webhook", "version": "v1",
+        "settings": {"url": "http://alert-sink:9000/alert", "httpMethod": "POST",
+                     "payload": {"template": template}},
+    },
+}
+receiver = base64.urlsafe_b64encode(b"agent-webhook").decode().rstrip("=")
+url = ("http://tig-test-grafana:3000/apis/notifications.alerting.grafana.app/v1beta1"
+       f"/namespaces/default/receivers/{receiver}/test")
+request = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST")
+request.add_header("Content-Type", "application/json")
+request.add_header("Authorization", "Basic " + base64.b64encode(b"admin:test-password-123").decode())
+reply = json.load(urllib.request.urlopen(request, timeout=30))
+assert reply.get("status") == "success", reply
+'
+}
+sink_payload_is_correct() {
+    $RUNTIME logs tig-test-sink 2>/dev/null | tail -1 | python3 -c '
+import json, sys
+payload = json.loads(sys.stdin.read())
+assert sorted(payload) == ["host", "output", "prompt", "service", "state", "type"], sorted(payload)
+assert payload["type"] == "TREND" and payload["state"] == "WARNING", payload
+assert "NOT AN OUTAGE" in payload["prompt"], payload["prompt"]
+assert "Disk fills within 7 days: /var is full in under 7 days." in payload["prompt"], payload["prompt"]
+assert payload["service"] == "Disk fills within 7 days", payload["service"]
+'
+}
+contact_point_is_webhook() {
+    grafana_api /api/v1/provisioning/contact-points | contains '"type":"webhook"'
+}
+check "contact point is the agent webhook"   contact_point_is_webhook
+check "sample alert is delivered"            send_sample_alert
+check "delivered payload has the right shape" sink_payload_is_correct
 
 echo "=== MCP server (upstream image, flags from the shipped unit) ==="
 

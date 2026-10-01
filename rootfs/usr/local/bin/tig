@@ -10,7 +10,7 @@
 #   influxd   /etc/influxdb/config.yml (override with INFLUXD_CONFIG_PATH).
 #             INFLUXDB_INIT_* are read by influxdb-bootstrap, not by influxd.
 #   grafana   /etc/grafana/grafana.ini plus provisioning/ and dashboards/.
-#             GF_* override the ini; INFLUXDB_TOKEN and ALERT_EMAIL are
+#             GF_* override the ini; INFLUXDB_TOKEN and ALERT_WEBHOOK_URL are
 #             expanded by the provisioning files.
 #   telegraf  /etc/telegraf/telegraf.conf. INFLUX_URL, INFLUX_ORG,
 #             INFLUX_BUCKET and INFLUX_TOKEN are expanded by that file.
