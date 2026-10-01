@@ -45,6 +45,14 @@ The `tig` units carry `io.containers.autoupdate=registry` and follow `latest`.
 | Container | Cap |
 |-----------|-----|
 | influxdb | 768m |
-| grafana | 512m |
+| grafana | 512m (`GOMEMLIMIT=400MiB`) |
 | telegraf | 384m |
 | mcp-grafana | 128m |
+
+Grafana is a Go program and the Go runtime does not read the container's
+memory limit: with the default collector setting its heap may grow to twice
+the live data before a collection runs. Idle at 150-270 MB, it reached the
+512 MB cap and was OOM-killed while a dashboard was open, then fell back to
+300 MB on its own once the dashboard was closed. `GOMEMLIMIT` in the unit
+makes the runtime collect before the cap. Keep it at about 80% of `--memory`
+if the cap changes.

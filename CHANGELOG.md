@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-01
+
+### Fixed
+
+- Grafana was OOM-killed at its 512 MB cap with a dashboard open. The Go
+  runtime does not see the container limit and let the heap grow to the cap;
+  the same process fell back to 300 MB once the dashboard closed. The unit
+  sets `GOMEMLIMIT=400MiB` so the runtime collects first.
+- The per-process panels of the Sockets, Pipes and Files dashboard ask for at
+  most 300 points per series, about a quarter of what they pulled over 24
+  hours.
+
 ## [0.2.1] - 2026-10-01
 
 ### Fixed
