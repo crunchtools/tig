@@ -1,0 +1,261 @@
+# Trend alert rules — the slope detection Cacti+THOLD used to do.
+#
+# Each rule compares a rate of change (6-hour window) against the headroom
+# left, and fires on time-to-exhaustion rather than on a level. Nagios owns the
+# level thresholds; these only answer "is it about to break?".
+
+apiVersion: 1
+groups:
+- orgId: 1
+  name: trends
+  folder: TIG Alerts
+  interval: 5m
+  rules:
+  - uid: disk-time-to-full
+    title: Disk fills within 7 days
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: A
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "disk" and r._field == "used")
+            |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+            |> derivative(unit: 1h, nonNegative: false)
+            |> keep(columns: ["_time", "_value", "path"])
+            |> group(columns: ["path"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: B
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: B
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "disk" and r._field == "free")
+            |> aggregateWindow(every: 5m, fn: last, createEmpty: false)
+            |> keep(columns: ["_time", "_value", "path"])
+            |> group(columns: ["path"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: RA
+      datasourceUid: __expr__
+      model:
+        refId: RA
+        type: reduce
+        expression: A
+        reducer: mean
+        settings:
+          mode: dropNN
+    - refId: RB
+      datasourceUid: __expr__
+      model:
+        refId: RB
+        type: reduce
+        expression: B
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: math
+        expression: $RA > 0 && ($RB / $RA) < 168
+    noDataState: OK
+    execErrState: Error
+    for: 30m
+    labels:
+      severity: warning
+    annotations:
+      summary: At the growth rate of the last 6 hours, {{ $labels.path }} is full in under 7 days.
+  - uid: memory-time-to-exhaustion
+    title: Available memory exhausted within 24 hours
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: A
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "mem" and r._field == "available")
+            |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+            |> derivative(unit: 1h, nonNegative: false)
+            |> keep(columns: ["_time", "_value", "host"])
+            |> group(columns: ["host"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: B
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: B
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "mem" and r._field == "available")
+            |> aggregateWindow(every: 5m, fn: last, createEmpty: false)
+            |> keep(columns: ["_time", "_value", "host"])
+            |> group(columns: ["host"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: RA
+      datasourceUid: __expr__
+      model:
+        refId: RA
+        type: reduce
+        expression: A
+        reducer: mean
+        settings:
+          mode: dropNN
+    - refId: RB
+      datasourceUid: __expr__
+      model:
+        refId: RB
+        type: reduce
+        expression: B
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: math
+        expression: $RA < 0 && ($RB / (0 - $RA)) < 24
+    noDataState: OK
+    execErrState: Error
+    for: 30m
+    labels:
+      severity: warning
+    annotations:
+      summary: Available memory on {{ $labels.host }} has been falling for 6 hours and runs out in under 24.
+  - uid: swap-growth
+    title: Swap grew more than 1 GiB in 6 hours
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: A
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "swap" and r._field == "used")
+            |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+            |> derivative(unit: 1h, nonNegative: false)
+            |> keep(columns: ["_time", "_value", "host"])
+            |> group(columns: ["host"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: RA
+      datasourceUid: __expr__
+      model:
+        refId: RA
+        type: reduce
+        expression: A
+        reducer: mean
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: math
+        expression: ($RA * 6) > 1073741824
+    noDataState: OK
+    execErrState: Error
+    for: 30m
+    labels:
+      severity: warning
+    annotations:
+      summary: Swap in use on {{ $labels.host }} grew by more than 1 GiB over the last 6 hours.
+  - uid: container-memory-time-to-limit
+    title: Container reaches its memory limit within 12 hours
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: A
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "docker_container_mem" and r._field == "usage_percent")
+            |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+            |> derivative(unit: 1h, nonNegative: false)
+            |> keep(columns: ["_time", "_value", "container_name"])
+            |> group(columns: ["container_name"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: B
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: B
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "docker_container_mem" and r._field == "usage_percent")
+            |> aggregateWindow(every: 5m, fn: last, createEmpty: false)
+            |> keep(columns: ["_time", "_value", "container_name"])
+            |> group(columns: ["container_name"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: RA
+      datasourceUid: __expr__
+      model:
+        refId: RA
+        type: reduce
+        expression: A
+        reducer: mean
+        settings:
+          mode: dropNN
+    - refId: RB
+      datasourceUid: __expr__
+      model:
+        refId: RB
+        type: reduce
+        expression: B
+        reducer: last
+        settings:
+          mode: dropNN
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: math
+        expression: $RB > 60 && $RA > 0 && ((100 - $RB) / $RA) < 12
+    noDataState: OK
+    execErrState: Error
+    for: 30m
+    labels:
+      severity: warning
+    annotations:
+      summary: '{{ $labels.container_name }} is above 60% of its memory limit and climbing; it hits the limit in under 12
+        hours.'

@@ -1,0 +1,91 @@
+#!/bin/bash
+# Idempotent first-run setup for the influxd role.
+#
+# Usage (from the unit's ExecStartPost, inside the running container):
+#   influxdb-bootstrap            initial setup, rollup bucket, rollup task
+#   influxdb-bootstrap token <write|read>
+#                                 mint a bucket-scoped token and print it
+#
+# Reads INFLUXDB_INIT_{USERNAME,PASSWORD,ORG,BUCKET,RETENTION,ADMIN_TOKEN} from
+# the container environment (the unit's --env-file). Safe to run on every
+# start: each step checks before it acts.
+
+set -euo pipefail
+
+HOST="http://127.0.0.1:8086"
+ORG="${INFLUXDB_INIT_ORG:?INFLUXDB_INIT_ORG is required}"
+BUCKET="${INFLUXDB_INIT_BUCKET:-telegraf}"
+ROLLUP_BUCKET="${BUCKET}_rollup"
+TOKEN="${INFLUXDB_INIT_ADMIN_TOKEN:?INFLUXDB_INIT_ADMIN_TOKEN is required}"
+
+influx_cli() {
+    influx "$@" --host "$HOST" --token "$TOKEN"
+}
+
+wait_for_influxd() {
+    local tries=60
+    until curl -sf "$HOST/health" >/dev/null; do
+        tries=$((tries - 1))
+        if [ "$tries" -le 0 ]; then
+            echo "influxdb-bootstrap: influxd did not become healthy" >&2
+            exit 1
+        fi
+        sleep 2
+    done
+}
+
+bucket_id() {
+    influx_cli bucket list --org "$ORG" --name "$1" --hide-headers 2>/dev/null | awk '{print $1; exit}'
+}
+
+token_field() {
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
+}
+
+mint_token() {
+    local kind="$1" id rollup_id
+    id="$(bucket_id "$BUCKET")"
+    rollup_id="$(bucket_id "$ROLLUP_BUCKET")"
+    case "$kind" in
+        write)
+            influx_cli auth create --org "$ORG" --description "telegraf write" \
+                --write-bucket "$id" --json | token_field
+            ;;
+        read)
+            influx_cli auth create --org "$ORG" --description "grafana read" \
+                --read-bucket "$id" --read-bucket "$rollup_id" --json | token_field
+            ;;
+        *)
+            echo "usage: influxdb-bootstrap token <write|read>" >&2
+            exit 64
+            ;;
+    esac
+}
+
+wait_for_influxd
+
+if [ "${1:-}" = "token" ]; then
+    mint_token "${2:-}"
+    exit 0
+fi
+
+if curl -sf "$HOST/api/v2/setup" | grep -q '"allowed":[[:space:]]*true'; then
+    influx setup --force --host "$HOST" \
+        --username "${INFLUXDB_INIT_USERNAME:?INFLUXDB_INIT_USERNAME is required}" \
+        --password "${INFLUXDB_INIT_PASSWORD:?INFLUXDB_INIT_PASSWORD is required}" \
+        --org "$ORG" \
+        --bucket "$BUCKET" \
+        --retention "${INFLUXDB_INIT_RETENTION:-90d}" \
+        --token "$TOKEN"
+    echo "influxdb-bootstrap: initial setup complete"
+fi
+
+if [ -z "$(bucket_id "$ROLLUP_BUCKET")" ]; then
+    influx_cli bucket create --org "$ORG" --name "$ROLLUP_BUCKET" --retention 730d >/dev/null
+    echo "influxdb-bootstrap: created bucket $ROLLUP_BUCKET"
+fi
+
+if ! influx_cli task list --org "$ORG" --hide-headers 2>/dev/null | grep -q 'rollup-1h'; then
+    influx_cli task create --org "$ORG" --file /usr/local/share/tig/rollup.flux >/dev/null
+    echo "influxdb-bootstrap: created task rollup-1h"
+fi

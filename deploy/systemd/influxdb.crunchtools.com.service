@@ -1,0 +1,47 @@
+[Unit]
+Description=Podman container - influxdb.crunchtools.com (InfluxDB 2.x time-series database)
+Documentation=https://github.com/crunchtools/tig
+Wants=network-online.target
+After=network-online.target
+
+# Reached two ways: as "influxdb" on the crunchtools network (Grafana), and on
+# 127.0.0.1:8099 (the Telegraf collector, which runs with --network=host).
+# 8086, InfluxDB's default, was already taken on the deploy host.
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=/usr/bin/sleep 1.5
+ExecStartPre=-/usr/bin/podman rm -f influxdb.crunchtools.com
+ExecStartPre=/usr/bin/mkdir -p /srv/influxdb.crunchtools.com/data
+ExecStartPre=/usr/bin/chown 1501:1501 /srv/influxdb.crunchtools.com/data
+ExecStart=/usr/bin/podman run \
+    --health-cmd "curl -sf http://127.0.0.1:8086/health" \
+    --health-interval 2m \
+    --health-retries 2 \
+    --health-start-period 90s \
+    --health-on-failure kill \
+    --label io.containers.autoupdate=registry \
+    --label PODMAN_SYSTEMD_UNIT=influxdb.crunchtools.com.service \
+    --memory=768m \
+    --memory-swap=768m \
+    --rm \
+    --name influxdb.crunchtools.com \
+    --hostname influxdb.crunchtools.com \
+    --user 1501:1501 \
+    --network crunchtools \
+    --network-alias influxdb \
+    -p 127.0.0.1:8099:8086 \
+    --env-file /srv/influxdb.crunchtools.com/config/influxdb.env \
+    -v /srv/influxdb.crunchtools.com/config/etc:/etc/influxdb:ro,Z \
+    -v /srv/influxdb.crunchtools.com/data:/var/lib/influxdb2:Z \
+    quay.io/crunchtools/tig:latest influxd
+# First start: initial setup. Every start: make sure the rollup bucket and task
+# still exist. Idempotent; see rootfs/usr/local/bin/influxdb-bootstrap.
+ExecStartPost=/usr/bin/podman exec influxdb.crunchtools.com /usr/local/bin/influxdb-bootstrap
+ExecStop=/usr/bin/podman stop -t 30 influxdb.crunchtools.com
+ExecStopPost=/usr/bin/podman rm -f influxdb.crunchtools.com
+
+[Install]
+WantedBy=multi-user.target

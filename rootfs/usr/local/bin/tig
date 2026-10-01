@@ -1,0 +1,33 @@
+#!/bin/bash
+# Role dispatcher for the tig image.
+#
+# Usage: tig <influxd|grafana|telegraf> [extra args for that daemon]
+#
+# Each container runs exactly one role in the foreground as PID 1. Config comes
+# from /srv/<service>/config on the host, bind-mounted read-only at the path
+# named below (constitution XIV); nothing role-specific is baked into the image.
+
+set -euo pipefail
+
+role="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$role" in
+    influxd)
+        export INFLUXD_CONFIG_PATH="${INFLUXD_CONFIG_PATH:-/etc/influxdb/config.yml}"
+        exec /usr/bin/influxd "$@"
+        ;;
+    grafana)
+        exec /usr/sbin/grafana server \
+            --homepath /usr/share/grafana \
+            --config /etc/grafana/grafana.ini \
+            "$@"
+        ;;
+    telegraf)
+        exec /usr/bin/telegraf --config /etc/telegraf/telegraf.conf "$@"
+        ;;
+    *)
+        echo "usage: tig <influxd|grafana|telegraf> [args...]" >&2
+        exit 64
+        ;;
+esac

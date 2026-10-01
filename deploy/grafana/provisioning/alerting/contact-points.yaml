@@ -1,0 +1,21 @@
+apiVersion: 1
+
+# The address comes from ALERT_EMAIL in grafana.env (constitution XVII: no
+# addresses in a public repo).
+contactPoints:
+  - orgId: 1
+    name: ops-email
+    receivers:
+      - uid: ops-email
+        type: email
+        settings:
+          addresses: $ALERT_EMAIL
+          singleEmail: true
+
+policies:
+  - orgId: 1
+    receiver: ops-email
+    group_by: [alertname]
+    group_wait: 1m
+    group_interval: 10m
+    repeat_interval: 12h

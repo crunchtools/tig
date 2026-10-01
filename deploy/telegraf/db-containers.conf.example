@@ -1,0 +1,4 @@
+# /srv/telegraf.crunchtools.com/config/db-containers.conf
+# <container-name> <mariadb|postgres> [db-user]
+blog.example.com mariadb
+app.example.com postgres appuser

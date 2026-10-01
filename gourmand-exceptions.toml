@@ -1,0 +1,42 @@
+# Gourmand Exceptions
+# Documented exceptions for files that legitimately trigger checks
+
+# rootfs/ mirrors the container image's filesystem. The scripts under it are
+# what the image ships, not loose helpers: Telegraf's exec inputs name them by
+# absolute path in telegraf.conf, and each carries a header documenting usage.
+
+[[exceptions]]
+check = "random_scripts"
+path = "rootfs/usr/local/libexec/telegraf/fd_types.py"
+justification = "Telegraf exec input; telegraf.conf runs it from this libexec path. rootfs/ mirrors the image layout, so relocating it to scripts/ would put it somewhere the collector does not look."
+classification = "by_design"
+
+[[exceptions]]
+check = "random_scripts"
+path = "rootfs/usr/local/libexec/telegraf/ctr_db_status.sh"
+justification = "Telegraf exec input; telegraf.conf runs it from this libexec path. rootfs/ mirrors the image layout, so relocating it to scripts/ would put it somewhere the collector does not look."
+classification = "by_design"
+
+[[exceptions]]
+check = "random_scripts"
+path = "rootfs/usr/local/libexec/telegraf/podman_exec.sh"
+justification = "Podman exec-socket helper called by ctr_db_status.sh from the same libexec directory. Same script as crunchtools/nagios-agent ships; the collector image has no podman CLI."
+classification = "by_design"
+
+# Absolute paths are the interface in both trees. rootfs/ files name the paths
+# they are installed to inside the image. deploy/ files are configuration for
+# daemons that take absolute paths: grafana.ini's [paths], NRPE command
+# definitions, systemd units, and the /srv/<service>/config locations the
+# examples document (constitution XIV).
+
+[[exceptions]]
+check = "CH001-absolute_paths"
+path = "rootfs/**"
+classification = "by_design"
+justification = "rootfs/ mirrors the container image's filesystem layout. The absolute paths are the contract between the dispatcher, the config files and the daemons; a relative path would not resolve inside the container."
+
+[[exceptions]]
+check = "CH001-absolute_paths"
+path = "deploy/**"
+classification = "by_design"
+justification = "Daemon configuration and units: grafana.ini [paths], NRPE command definitions and podman bind mounts are absolute by definition, and the env examples document the per-service host config location required by constitution XIV."

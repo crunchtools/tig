@@ -1,0 +1,30 @@
+#!/bin/bash
+# Print the age, in seconds, of the newest Telegraf point in InfluxDB.
+#
+# Usage: influxdb-freshness
+#
+# Runs inside the influxd container (it reads the admin token from that
+# container's own environment), so a monitoring check can call it over the
+# Podman exec socket without holding any credential itself. Prints -1 if no
+# point has arrived in the last 24 hours.
+
+set -euo pipefail
+
+newest="$(influx query --raw \
+    --host http://127.0.0.1:8086 \
+    --org "${INFLUXDB_INIT_ORG:?}" \
+    --token "${INFLUXDB_INIT_ADMIN_TOKEN:?}" \
+    "from(bucket: \"${INFLUXDB_INIT_BUCKET:-telegraf}\")
+       |> range(start: -24h)
+       |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"load1\")
+       |> group()
+       |> last()
+       |> keep(columns: [\"_time\"])" \
+    | tr -d '\r' | awk -F, '/^,_result/ {print $NF}' | tail -1)"
+
+if [ -z "$newest" ]; then
+    echo -1
+    exit 0
+fi
+
+echo $(( $(date +%s) - $(date -d "$newest" +%s) ))

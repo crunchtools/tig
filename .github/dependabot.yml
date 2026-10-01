@@ -1,0 +1,15 @@
+# Constitution XV. The image has no language lockfile; the RPM versions are
+# pinned by glob in the Containerfile and move with the weekly rebuild. What can
+# go stale silently here is the `uses:` pins in .github/workflows/.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

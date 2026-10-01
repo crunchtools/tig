@@ -1,0 +1,54 @@
+[Unit]
+Description=Podman container - telegraf.crunchtools.com (Telegraf host and container collector)
+Documentation=https://github.com/crunchtools/tig
+Wants=network-online.target influxdb.crunchtools.com.service
+After=network-online.target influxdb.crunchtools.com.service podman.socket
+
+# This container sees the whole host, read-only, and must never be merged with
+# anything that answers network requests:
+#
+#   --pid=host, --network=host   /proc shows the host's processes, disks and
+#                                interfaces rather than the container's own.
+#   /run/podman/podman.sock      per-container stats, and exec into the database
+#                                containers. This socket is root on the host.
+#   / at /hostfs, read-only      filesystem usage for the disk input.
+#   SYS_PTRACE, DAC_READ_SEARCH  read /proc/<pid>/fd of processes owned by
+#                                other users, for the fd-type walker.
+#
+# Every other capability is dropped and the root filesystem is read-only.
+# SELinux confinement is off (label=disable) because a confined container
+# cannot read the host's /proc/<pid>/fd or the unlabelled socket. The host
+# mounts carry no :z/:Z on purpose — relabelling / or the Podman socket would
+# break the host.
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=/usr/bin/sleep 1.5
+ExecStartPre=-/usr/bin/podman rm -f telegraf.crunchtools.com
+ExecStart=/usr/bin/podman run \
+    --label io.containers.autoupdate=registry \
+    --label PODMAN_SYSTEMD_UNIT=telegraf.crunchtools.com.service \
+    --memory=192m \
+    --memory-swap=192m \
+    --rm \
+    --name telegraf.crunchtools.com \
+    --network=host \
+    --pid=host \
+    --read-only \
+    --tmpfs /tmp \
+    --cap-drop=all \
+    --cap-add SYS_PTRACE \
+    --cap-add DAC_READ_SEARCH \
+    --security-opt label=disable \
+    --env-file /srv/telegraf.crunchtools.com/config/telegraf.env \
+    -v /srv/telegraf.crunchtools.com/config/etc:/etc/telegraf:ro \
+    -v /:/hostfs:ro \
+    -v /run/podman/podman.sock:/run/podman/podman.sock \
+    quay.io/crunchtools/tig:latest telegraf
+ExecStop=/usr/bin/podman stop -t 10 telegraf.crunchtools.com
+ExecStopPost=/usr/bin/podman rm -f telegraf.crunchtools.com
+
+[Install]
+WantedBy=multi-user.target

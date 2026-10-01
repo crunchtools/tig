@@ -1,0 +1,18 @@
+# influxd configuration. Installed to /srv/influxdb.crunchtools.com/config/ and
+# mounted read-only at /etc/influxdb.
+#
+# The memory numbers are sized for a 768 MB container on a host with little
+# headroom: a single collector, ~60 containers, 30-second interval.
+
+bolt-path: /var/lib/influxdb2/influxd.bolt
+engine-path: /var/lib/influxdb2/engine
+http-bind-address: ":8086"
+reporting-disabled: true
+log-level: warn
+
+storage-cache-max-memory-size: 268435456        # 256 MiB
+storage-cache-snapshot-memory-size: 26214400    # 25 MiB
+storage-max-concurrent-compactions: 1
+query-concurrency: 4
+query-queue-size: 16
+query-memory-bytes: 134217728                   # 128 MiB per query
