@@ -26,6 +26,7 @@ podman run -d --name influxdb --network tig --user 1501:1501 \
     -e HOME=/var/lib/influxdb2 -e INFLUXDB_INIT_USERNAME=admin \
     -e INFLUXDB_INIT_PASSWORD=change-me-now -e INFLUXDB_INIT_ORG=crunchtools \
     -e INFLUXDB_INIT_ADMIN_TOKEN=change-me-too \
+    -v tig-influxdb:/var/lib/influxdb2 \
     -v ./deploy/influxdb/config.yml:/etc/influxdb/config.yml:ro,Z \
     quay.io/crunchtools/tig influxd
 podman exec influxdb influxdb-bootstrap

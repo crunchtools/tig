@@ -90,6 +90,27 @@ for raw, want in cases.items():
     assert got == want, (raw, got, want)
 '
 
+check "fd walker classifies descriptor types" \
+    $RUNTIME run --rm --entrypoint python3 "$IMAGE" -c '
+import sys
+sys.path.insert(0, "/usr/local/libexec/telegraf")
+import fd_types
+sockets = {"11": "tcp", "12": "udp", "13": "unix"}
+cases = {
+    "/var/log/messages": "files",
+    "pipe:[4242]": "pipes",
+    "socket:[11]": "tcp",
+    "socket:[12]": "udp",
+    "socket:[13]": "unix",
+    "socket:[99]": "other",
+    "anon_inode:[eventpoll]": "other",
+}
+for target, want in cases.items():
+    got = fd_types.classify(target, sockets)
+    assert got == want, (target, got, want)
+assert fd_types.socket_table("0") == {}, "a missing /proc entry must yield an empty table"
+'
+
 echo "=== Runtime tests ==="
 
 $RUNTIME network create "$NET" >/dev/null
@@ -130,6 +151,23 @@ check "telegraf writes with the shipped config" \
 check "read token can query the point back" \
     sh -c "$RUNTIME exec tig-test-influxdb influx query --org crunchtools --token '$READ_TOKEN' \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"mem\") |> limit(n:1)' | grep -q available"
+# The tokens are only worth minting if they are actually scoped.
+write_token_cannot_read() {
+    ! $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$WRITE_TOKEN" \
+        'from(bucket:"telegraf") |> range(start:-5m) |> limit(n:1)' 2>/dev/null | grep -q _value
+}
+read_token_cannot_write() {
+    ! $RUNTIME exec tig-test-influxdb influx write --org crunchtools --bucket telegraf \
+        --token "$READ_TOKEN" 'forged value=1' >/dev/null 2>&1
+}
+freshness_reports_recent_age() {
+    local age
+    age="$($RUNTIME exec tig-test-influxdb /usr/local/bin/influxdb-freshness)"
+    [ "$age" -ge 0 ] && [ "$age" -lt 300 ]
+}
+check "write token cannot read"                write_token_cannot_read
+check "read token cannot write"                read_token_cannot_write
+check "freshness helper reports a recent age"  freshness_reports_recent_age
 check "fd walker data reached influxdb" \
     sh -c "$RUNTIME exec tig-test-influxdb influx query --org crunchtools --token '$READ_TOKEN' \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"fd_types_total\") |> limit(n:1)' | grep -q fd_types_total"
@@ -154,9 +192,15 @@ dashboards_provisioned() { [ "$(grafana_api '/api/search?tag=tig' | grep -o '"ui
 alert_rules_provisioned() { [ "$(grafana_api /api/v1/provisioning/alert-rules | grep -o '"uid":"' | wc -l)" -ge 4 ]; }
 
 check "datasource provisioned"       datasource_provisioned
-check "datasource reaches influxdb"  datasource_healthy
-check "only the influxdb plugin backend runs" \
-    sh -c "test \"\$($RUNTIME exec tig-test-grafana ps -e -o args= | grep -c '/gpx_')\" -eq 1 && $RUNTIME exec tig-test-grafana ps -e -o args= | grep -q gpx_grafana_influxdb"
+# Grafana answers /api/health a few seconds before its bundled InfluxDB plugin
+# has been unpacked and started, so these two wait rather than race it.
+plugin_backends() { $RUNTIME exec tig-test-grafana ps -e -o args= | grep '/gpx_'; }
+influxdb_plugin_running() { plugin_backends | grep -q gpx_grafana_influxdb; }
+one_plugin_backend() { [ "$(plugin_backends | grep -c gpx_)" -eq 1 ]; }
+
+check "influxdb plugin backend starts"        wait_for "influxdb plugin" influxdb_plugin_running
+check "datasource reaches influxdb"           wait_for "datasource health" datasource_healthy
+check "no other plugin backend is running"    one_plugin_backend
 check "four dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
 
