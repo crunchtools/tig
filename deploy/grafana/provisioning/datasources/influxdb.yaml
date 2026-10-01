@@ -1,0 +1,18 @@
+apiVersion: 1
+
+# The uid is referenced by every dashboard and alert rule; do not change it.
+datasources:
+  - name: InfluxDB
+    uid: influxdb
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    isDefault: true
+    editable: false
+    jsonData:
+      version: Flux
+      organization: crunchtools
+      defaultBucket: telegraf
+      timeInterval: 30s
+    secureJsonData:
+      token: $INFLUXDB_TOKEN

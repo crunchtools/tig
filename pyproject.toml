@@ -1,0 +1,16 @@
+# Lint configuration for the Python exec inputs under rootfs/. This repo ships a
+# container image, not a Python package; there is nothing to build or install.
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "PLR", "C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-branches = 10
+max-statements = 50

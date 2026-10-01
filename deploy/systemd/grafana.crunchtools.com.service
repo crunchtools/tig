@@ -1,0 +1,43 @@
+[Unit]
+Description=Podman container - grafana.crunchtools.com (Grafana dashboards and trend alerting)
+Documentation=https://github.com/crunchtools/tig
+Wants=network-online.target influxdb.crunchtools.com.service
+After=network-online.target influxdb.crunchtools.com.service
+
+# Published on 127.0.0.1:8098 for the front-end proxy, and reachable as
+# "grafana" on the crunchtools network for the mcp-grafana backend.
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=/usr/bin/sleep 1.5
+ExecStartPre=-/usr/bin/podman rm -f grafana.crunchtools.com
+ExecStartPre=/usr/bin/mkdir -p /srv/grafana.crunchtools.com/data
+ExecStartPre=/usr/bin/chown 1502:1502 /srv/grafana.crunchtools.com/data
+ExecStart=/usr/bin/podman run \
+    --health-cmd "curl -sf http://127.0.0.1:3000/api/health" \
+    --health-interval 2m \
+    --health-retries 2 \
+    --health-start-period 90s \
+    --health-on-failure kill \
+    --label io.containers.autoupdate=registry \
+    --label PODMAN_SYSTEMD_UNIT=grafana.crunchtools.com.service \
+    --memory=384m \
+    --memory-swap=384m \
+    --rm \
+    --name grafana.crunchtools.com \
+    --hostname grafana.crunchtools.com \
+    --user 1502:1502 \
+    --network crunchtools \
+    --network-alias grafana \
+    -p 127.0.0.1:8098:3000 \
+    --env-file /srv/grafana.crunchtools.com/config/grafana.env \
+    -v /srv/grafana.crunchtools.com/config/etc:/etc/grafana:ro,Z \
+    -v /srv/grafana.crunchtools.com/data:/var/lib/grafana:Z \
+    quay.io/crunchtools/tig:latest grafana
+ExecStop=/usr/bin/podman stop -t 10 grafana.crunchtools.com
+ExecStopPost=/usr/bin/podman rm -f grafana.crunchtools.com
+
+[Install]
+WantedBy=multi-user.target

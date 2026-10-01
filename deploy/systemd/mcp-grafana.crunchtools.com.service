@@ -1,0 +1,43 @@
+[Unit]
+Description=Podman container - mcp-grafana.crunchtools.com (read-only MCP access to Grafana)
+Documentation=https://github.com/crunchtools/tig
+Wants=network-online.target grafana.crunchtools.com.service
+After=network-online.target grafana.crunchtools.com.service
+
+# Upstream grafana/mcp-grafana, unmodified and pinned. The MCP gateway reaches
+# it as http://mcp-grafana:8029/mcp on the crunchtools network.
+#
+#   --disable-write   no dashboard, alert, annotation or incident mutations
+#   --enable-query    keeps query_influxdb, which --disable-write would drop
+#   --enabled-tools   only the categories this deployment has data for
+#
+# The Grafana token in mcp-grafana.env belongs to a Viewer service account, so
+# the read-only posture holds even if a flag is changed by mistake.
+
+[Service]
+Type=notify
+NotifyAccess=all
+Restart=always
+RestartSec=10
+ExecStartPre=-/usr/bin/podman rm -f mcp-grafana
+ExecStart=/usr/bin/podman run -d --sdnotify=conmon \
+    --label PODMAN_SYSTEMD_UNIT=mcp-grafana.crunchtools.com.service \
+    --memory=128m \
+    --memory-swap=128m \
+    --rm \
+    --name mcp-grafana \
+    --network crunchtools \
+    -p 127.0.0.1:8029:8029 \
+    --env-file /srv/mcp-grafana.crunchtools.com/config/mcp-grafana.env \
+    docker.io/grafana/mcp-grafana:1.6.3 \
+    -t streamable-http \
+    --address 0.0.0.0:8029 \
+    --allowed-hosts mcp-grafana:8029,127.0.0.1:8029,localhost:8029 \
+    --disable-write \
+    --enable-query \
+    --enabled-tools search,datasource,dashboard,influxdb,alerting,navigation
+ExecStop=/usr/bin/podman stop -t 10 mcp-grafana
+ExecStopPost=/usr/bin/podman rm -f mcp-grafana
+
+[Install]
+WantedBy=multi-user.target

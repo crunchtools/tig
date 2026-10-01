@@ -1,0 +1,37 @@
+#!/bin/bash
+# Print the age, in seconds, of the newest Telegraf point in InfluxDB.
+#
+# Usage: influxdb-freshness
+#
+# Runs inside the influxd container (it reads the admin token from that
+# container's own environment), so a monitoring check can call it over the
+# Podman exec socket without holding any credential itself. Prints -1 if no
+# point has arrived in the last 24 hours.
+
+set -euo pipefail
+
+# --raw returns annotated CSV: header rows starting with '#', a column-name
+# row, then data rows whose last column is the RFC 3339 timestamp kept by the
+# query. Only a data row ends in a timestamp.
+#
+# Host and token go through the environment, not flags, to stay out of the
+# process list.
+export INFLUX_HOST="http://127.0.0.1:8086"
+export INFLUX_TOKEN="${INFLUXDB_INIT_ADMIN_TOKEN:?}"
+
+newest="$(influx query --raw \
+    --org "${INFLUXDB_INIT_ORG:?}" \
+    "from(bucket: \"${INFLUXDB_INIT_BUCKET:-telegraf}\")
+       |> range(start: -24h)
+       |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"load1\")
+       |> group()
+       |> last()
+       |> keep(columns: [\"_time\"])" \
+    | tr -d '\r' | awk -F, '$NF ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ {print $NF}' | tail -1)"
+
+if [ -z "$newest" ]; then
+    echo -1
+    exit 0
+fi
+
+echo $(( $(date +%s) - $(date -d "$newest" +%s) ))
