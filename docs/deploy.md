@@ -46,5 +46,5 @@ The `tig` units carry `io.containers.autoupdate=registry` and follow `latest`.
 |-----------|-----|
 | influxdb | 768m |
 | grafana | 512m |
-| telegraf | 192m |
+| telegraf | 384m |
 | mcp-grafana | 128m |
