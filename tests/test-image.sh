@@ -261,6 +261,13 @@ if [ "$FAIL" -gt 0 ]; then
     $RUNTIME logs --tail 40 tig-test-mcp 2>&1 || true
     echo "--- mcp tools/list response ---"
     echo "${MCP_TOOLS:-}" | cut -c1-2000
+    echo "--- rollup script output ---"
+    $RUNTIME exec -e INFLUX_HOST=http://127.0.0.1:8086 -e INFLUX_TOKEN=test-admin-token tig-test-influxdb \
+        influx query --org crunchtools --file /usr/local/share/tig/rollup.flux 2>&1 | tail -30 || true
+    echo "--- measurements in the rollup bucket ---"
+    $RUNTIME exec -e INFLUX_HOST=http://127.0.0.1:8086 -e INFLUX_TOKEN=test-admin-token tig-test-influxdb \
+        influx query --org crunchtools \
+        'from(bucket:"telegraf_rollup") |> range(start:-2h, stop:2h) |> keep(columns:["_measurement"]) |> group() |> distinct(column:"_measurement")' 2>&1 || true
     echo "--- influxdb log tail ---"
     $RUNTIME logs --tail 30 tig-test-influxdb 2>&1 || true
 fi
