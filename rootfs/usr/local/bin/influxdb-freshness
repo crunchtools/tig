@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+# --raw returns annotated CSV: header rows starting with '#', a column-name
+# row, then data rows whose last column is the RFC 3339 timestamp kept by the
+# query. Only a data row ends in a timestamp.
+#
 # Host and token go through the environment, not flags, to stay out of the
 # process list.
 export INFLUX_HOST="http://127.0.0.1:8086"
@@ -23,7 +27,7 @@ newest="$(influx query --raw \
        |> group()
        |> last()
        |> keep(columns: [\"_time\"])" \
-    | tr -d '\r' | awk -F, '/^,_result/ {print $NF}' | tail -1)"
+    | tr -d '\r' | awk -F, '$NF ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ {print $NF}' | tail -1)"
 
 if [ -z "$newest" ]; then
     echo -1

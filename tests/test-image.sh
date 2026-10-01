@@ -163,6 +163,7 @@ read_token_cannot_write() {
 freshness_reports_recent_age() {
     local age
     age="$($RUNTIME exec tig-test-influxdb /usr/local/bin/influxdb-freshness)"
+    echo "influxdb-freshness printed: '$age'"
     [ "$age" -ge 0 ] && [ "$age" -lt 300 ]
 }
 check "write token cannot read"                write_token_cannot_read
