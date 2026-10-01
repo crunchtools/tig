@@ -14,7 +14,8 @@ One collector container per host, on a 30-second interval. Config is
 | `net` | `inputs.net` | physical, bridge and WireGuard interfaces; counters |
 | `docker`, `docker_container_cpu`, `docker_container_mem`, `docker_container_net`, `docker_container_blkio` | `inputs.docker` against the Podman socket | tagged `container_name` |
 | `fd_types`, `fd_types_total` | `fd_types.py` | files, pipes, tcp, udp, unix, other; tagged `comm` |
-| `mysql_status`, `postgres_status` | `ctr_db_status.sh` | tagged `container`; counters |
+| `mysql_status`, `postgres_status` | `ctr_db_status.py` | tagged `container`; counters |
+| `db_collector` | `ctr_db_status.py` | `up` is 0 when a container's database did not answer |
 
 ## Host access
 
@@ -36,9 +37,10 @@ by process name to keep the series count bounded.
 ## Database counters
 
 Databases on the host live inside application containers and listen only on
-their own loopback. `ctr_db_status.sh` runs the database's own client inside
+their own loopback. `ctr_db_status.py` runs the database's own client inside
 each one over the Podman exec socket, as the local superuser, so no monitoring
-password exists anywhere. Containers are listed in
+password exists anywhere. It speaks to the socket directly and decodes the
+multiplexed exec stream frame by frame. Containers are listed in
 `/srv/telegraf.crunchtools.com/config/etc/db-containers.conf`:
 
 ```

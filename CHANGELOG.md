@@ -15,7 +15,7 @@ All notable changes to this project are documented here. The format follows
 - `influxdb-bootstrap`: idempotent first-run setup, a 2-year rollup bucket with
   an hourly downsample task, and scoped token minting.
 - Telegraf exec inputs: `fd_types.py` (open descriptors by type per process)
-  and `ctr_db_status.sh` (MariaDB and PostgreSQL counters over the Podman exec
+  and `ctr_db_status.py` (MariaDB and PostgreSQL counters over the Podman exec
   socket, no credentials).
 - Deploy tree: systemd units, Telegraf and InfluxDB config, Grafana
   provisioning with four dashboards and four trend alert rules.

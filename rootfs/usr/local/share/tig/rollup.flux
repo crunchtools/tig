@@ -4,6 +4,12 @@
 // rollup still gives a true rate. String fields are dropped: they cannot be
 // averaged and nothing graphs them.
 
+//
+// The 5-minute offset only delays when the task runs, so late-arriving points
+// are included. Inside the task now() is still the scheduled time, on the
+// hour, so range(start: -task.every) is exactly the previous clock hour and
+// lines up with the hourly windows.
+
 import "types"
 
 option task = {name: "rollup-1h", every: 1h, offset: 5m}

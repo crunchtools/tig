@@ -56,6 +56,11 @@ def socket_table(pid: str) -> dict[str, str]:
 
 
 def classify(target: str, sockets: dict[str, str]) -> str:
+    """Return the kind of one descriptor from its /proc/<pid>/fd link target.
+
+    `sockets` maps socket inode to "tcp", "udp" or "unix" for the process's
+    network namespace; a socket not in it (netlink, packet, raw) is "other".
+    """
     match = SOCKET_RE.match(target)
     if match is not None:
         return sockets.get(match.group(1), "other")
@@ -66,6 +71,7 @@ def classify(target: str, sockets: dict[str, str]) -> str:
 
 
 def main() -> int:
+    """Write one fd_types record per process name and a host total; return 0."""
     counts: dict[str, dict[str, int]] = defaultdict(lambda: dict.fromkeys((*KINDS, "procs"), 0))
     tables: dict[str, dict[str, str]] = {}
 
@@ -102,6 +108,7 @@ def main() -> int:
 
 
 def emit(series: str, row: dict[str, int]) -> None:
+    """Write one line-protocol record: `series` (measurement and tags), integer fields."""
     fields = ",".join(f"{key}={value}i" for key, value in row.items())
     sys.stdout.write(f"{series} {fields}\n")
 

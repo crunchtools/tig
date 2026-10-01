@@ -13,14 +13,8 @@ classification = "by_design"
 
 [[exceptions]]
 check = "random_scripts"
-path = "rootfs/usr/local/libexec/telegraf/ctr_db_status.sh"
+path = "rootfs/usr/local/libexec/telegraf/ctr_db_status.py"
 justification = "Telegraf exec input; telegraf.conf runs it from this libexec path. rootfs/ mirrors the image layout, so relocating it to scripts/ would put it somewhere the collector does not look."
-classification = "by_design"
-
-[[exceptions]]
-check = "random_scripts"
-path = "rootfs/usr/local/libexec/telegraf/podman_exec.sh"
-justification = "Podman exec-socket helper called by ctr_db_status.sh from the same libexec directory. Same script as crunchtools/nagios-agent ships; the collector image has no podman CLI."
 classification = "by_design"
 
 # Absolute paths are the interface in both trees. rootfs/ files name the paths

@@ -63,7 +63,7 @@ check "python3 present"          in_image "python3 --version"
 check "dispatcher executable"    in_image "test -x /usr/local/bin/tig"
 check "bootstrap executable"     in_image "test -x /usr/local/bin/influxdb-bootstrap"
 check "fd walker executable"     in_image "test -x /usr/local/libexec/telegraf/fd_types.py"
-check "db collector executable"  in_image "test -x /usr/local/libexec/telegraf/ctr_db_status.sh"
+check "db collector executable"  in_image "test -x /usr/local/libexec/telegraf/ctr_db_status.py"
 check "rollup task shipped"      in_image "test -r /usr/local/share/tig/rollup.flux"
 check "influxdb uid is 1501"     in_image "test \"\$(id -u influxdb)\" = 1501"
 check "grafana uid is 1502"      in_image "test \"\$(id -u grafana)\" = 1502"
@@ -71,45 +71,8 @@ check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$?
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
 
-# A process picks its own name; one containing a newline must not be able to
-# forge a second line-protocol record.
-check "fd walker neutralises hostile process names" \
-    $RUNTIME run --rm --entrypoint python3 "$IMAGE" -c '
-import sys
-sys.path.insert(0, "/usr/local/libexec/telegraf")
-import fd_types
-cases = {
-    "evil\nfd_types,comm=x files=9i d=e f": "evil_fd_types_comm_x_files_9i_d_e_f",
-    "a\n\nb\rc\td": "a__b_c_d",
-    "$(reboot);`id`|&\\\"": "__reboot___id_____",
-    "caf\u00e9\u2028x": "caf__x",
-    "kworker/0:1H-kblockd": "kworker/0:1H-kblockd",
-}
-for raw, want in cases.items():
-    got = fd_types.UNSAFE_TAG_RE.sub("_", raw)
-    assert got == want, (raw, got, want)
-'
-
-check "fd walker classifies descriptor types" \
-    $RUNTIME run --rm --entrypoint python3 "$IMAGE" -c '
-import sys
-sys.path.insert(0, "/usr/local/libexec/telegraf")
-import fd_types
-sockets = {"11": "tcp", "12": "udp", "13": "unix"}
-cases = {
-    "/var/log/messages": "files",
-    "pipe:[4242]": "pipes",
-    "socket:[11]": "tcp",
-    "socket:[12]": "udp",
-    "socket:[13]": "unix",
-    "socket:[99]": "other",
-    "anon_inode:[eventpoll]": "other",
-}
-for target, want in cases.items():
-    got = fd_types.classify(target, sockets)
-    assert got == want, (target, got, want)
-assert fd_types.socket_table("0") == {}, "a missing /proc entry must yield an empty table"
-'
+check "exec input unit tests" \
+    $RUNTIME run --rm --entrypoint python3 -v "$REPO/tests:/tests:ro" "$IMAGE" /tests/test_exec_inputs.py
 
 echo "=== Runtime tests ==="
 
@@ -169,6 +132,11 @@ freshness_reports_recent_age() {
 check "write token cannot read"                write_token_cannot_read
 check "read token cannot write"                read_token_cannot_write
 check "freshness helper reports a recent age"  freshness_reports_recent_age
+# Nothing has been rolled up yet, so the rollup bucket is the no-data case.
+freshness_reports_no_data() {
+    [ "$($RUNTIME exec -e INFLUXDB_INIT_BUCKET=telegraf_rollup tig-test-influxdb /usr/local/bin/influxdb-freshness)" = "-1" ]
+}
+check "freshness helper reports -1 with no data" freshness_reports_no_data
 check "fd walker data reached influxdb" \
     sh -c "$RUNTIME exec tig-test-influxdb influx query --org crunchtools --token '$READ_TOKEN' \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"fd_types_total\") |> limit(n:1)' | grep -q fd_types_total"
