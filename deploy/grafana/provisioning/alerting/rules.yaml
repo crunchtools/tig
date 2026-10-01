@@ -3,6 +3,10 @@
 # Each rule compares a rate of change (6-hour window) against the headroom
 # left, and fires on time-to-exhaustion rather than on a level. Nagios owns the
 # level thresholds; these only answer "is it about to break?".
+#
+# Warm-up guard: every rule also requires six 30-minute slope samples (N >= 6),
+# that is three hours of history. A slope over twenty minutes of data is the
+# start-up ramp of whatever was just restarted, not a trend.
 
 apiVersion: 1
 groups:
@@ -66,12 +70,21 @@ groups:
         reducer: last
         settings:
           mode: dropNN
+    - refId: N
+      datasourceUid: __expr__
+      model:
+        refId: N
+        type: reduce
+        expression: A
+        reducer: count
+        settings:
+          mode: dropNN
     - refId: C
       datasourceUid: __expr__
       model:
         refId: C
         type: math
-        expression: $RA > 0 && ($RB / $RA) < 168
+        expression: $N >= 6 && ($RA > 0 && ($RB / $RA) < 168)
     noDataState: OK
     execErrState: Error
     for: 30m
@@ -134,12 +147,21 @@ groups:
         reducer: last
         settings:
           mode: dropNN
+    - refId: N
+      datasourceUid: __expr__
+      model:
+        refId: N
+        type: reduce
+        expression: A
+        reducer: count
+        settings:
+          mode: dropNN
     - refId: C
       datasourceUid: __expr__
       model:
         refId: C
         type: math
-        expression: $RA < 0 && ($RB / (0 - $RA)) < 24
+        expression: $N >= 6 && ($RA < 0 && ($RB / (0 - $RA)) < 24)
     noDataState: OK
     execErrState: Error
     for: 30m
@@ -177,12 +199,21 @@ groups:
         reducer: mean
         settings:
           mode: dropNN
+    - refId: N
+      datasourceUid: __expr__
+      model:
+        refId: N
+        type: reduce
+        expression: A
+        reducer: count
+        settings:
+          mode: dropNN
     - refId: C
       datasourceUid: __expr__
       model:
         refId: C
         type: math
-        expression: ($RA * 6) > 1073741824
+        expression: $N >= 6 && (($RA * 6) > 1073741824)
     noDataState: OK
     execErrState: Error
     for: 30m
@@ -245,12 +276,21 @@ groups:
         reducer: last
         settings:
           mode: dropNN
+    - refId: N
+      datasourceUid: __expr__
+      model:
+        refId: N
+        type: reduce
+        expression: A
+        reducer: count
+        settings:
+          mode: dropNN
     - refId: C
       datasourceUid: __expr__
       model:
         refId: C
         type: math
-        expression: $RB > 60 && $RA > 0 && ((100 - $RB) / $RA) < 12
+        expression: $N >= 6 && ($RB > 60 && $RA > 0 && ((100 - $RB) / $RA) < 12)
     noDataState: OK
     execErrState: Error
     for: 30m

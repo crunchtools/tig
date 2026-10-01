@@ -24,7 +24,9 @@ left, and fires on time-to-exhaustion. Level thresholds stay in Nagios.
 | `swap-growth` | swap in use grew more than 1 GiB in 6 hours |
 | `container-memory-time-to-limit` | a container above 60% of its limit reaches it in under 12 hours |
 
-Rules must hold for 30 minutes before notifying. Notifications go by email to
+Every rule needs three hours of history before it judges a slope, so a
+freshly restarted service's start-up ramp is not read as a trend. Rules must
+then hold for 30 minutes before notifying. Notifications go by email to
 `ALERT_EMAIL`, through the SMTP relay named in `grafana.env`.
 
 ## Datasource

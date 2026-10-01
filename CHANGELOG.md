@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-30
+
+### Fixed
+
+- Trend alert rules require three hours of history (six slope samples)
+  before evaluating. Two rules went pending within twenty minutes of the
+  first deploy, reading the stack's own start-up as a trend.
+- Telegraf's memory cap is 384 MB. The process uses about 50 MB, but page
+  and dentry cache from walking `/proc` and `/hostfs` count toward the
+  container's usage and put it at 87% of the old 192 MB cap.
+
 ## [0.1.1] - 2026-09-30
 
 Found by the first production deploy.
