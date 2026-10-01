@@ -33,6 +33,15 @@ check() {
     fi
 }
 
+# `producer | grep -q` is a trap under pipefail: grep exits at the first match,
+# the producer dies of SIGPIPE mid-write, and the pipeline reports failure.
+# This reads everything first, then matches.
+contains() {
+    local haystack
+    haystack="$(cat)"
+    grep -q -- "$1" <<<"$haystack"
+}
+
 in_image() {
     $RUNTIME run --rm --entrypoint sh "$IMAGE" -c "$1"
 }
@@ -117,7 +126,7 @@ check "read token can query the point back" \
 # The tokens are only worth minting if they are actually scoped.
 write_token_cannot_read() {
     ! $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$WRITE_TOKEN" \
-        'from(bucket:"telegraf") |> range(start:-5m) |> limit(n:1)' 2>/dev/null | grep -q _value
+        'from(bucket:"telegraf") |> range(start:-5m) |> limit(n:1)' 2>/dev/null | contains _value
 }
 read_token_cannot_write() {
     ! $RUNTIME exec tig-test-influxdb influx write --org crunchtools --bucket telegraf \
@@ -148,7 +157,7 @@ rollup_script_runs() {
 rollup_bucket_has() {
     $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$READ_TOKEN" \
         "from(bucket:\"telegraf_rollup\") |> range(start:-2h, stop: 2h) |> filter(fn:(r)=>r._measurement==\"$1\") |> limit(n:1)" \
-        | grep -q "$1"
+        | contains "$1"
 }
 check "rollup script executes"               rollup_script_runs
 check "rollup wrote a gauge (mem)"           rollup_bucket_has mem
@@ -171,8 +180,8 @@ grafana_api() {
 check "grafana becomes healthy with shipped provisioning" \
     wait_for grafana $RUNTIME exec tig-test-grafana curl -sf http://127.0.0.1:3000/api/health
 
-datasource_provisioned() { grafana_api /api/datasources/uid/influxdb | grep -q '"type":"influxdb"'; }
-datasource_healthy()     { grafana_api /api/datasources/uid/influxdb/health | grep -q '"status":"OK"'; }
+datasource_provisioned() { grafana_api /api/datasources/uid/influxdb | contains '"type":"influxdb"'; }
+datasource_healthy()     { grafana_api /api/datasources/uid/influxdb/health | contains '"status":"OK"'; }
 dashboards_provisioned() { [ "$(grafana_api '/api/search?tag=tig' | grep -o '"uid":"tig-' | wc -l)" -eq 4 ]; }
 alert_rules_provisioned() { [ "$(grafana_api /api/v1/provisioning/alert-rules | grep -o '"uid":"' | wc -l)" -ge 4 ]; }
 
@@ -180,7 +189,7 @@ check "datasource provisioned"       datasource_provisioned
 # Grafana answers /api/health a few seconds before its bundled InfluxDB plugin
 # has been unpacked and started, so these two wait rather than race it.
 plugin_backends() { $RUNTIME exec tig-test-grafana ps -e -o args= | grep '/gpx_'; }
-influxdb_plugin_running() { plugin_backends | grep -q gpx_grafana_influxdb; }
+influxdb_plugin_running() { plugin_backends | contains gpx_grafana_influxdb; }
 one_plugin_backend() { [ "$(plugin_backends | grep -c gpx_)" -eq 1 ]; }
 
 check "influxdb plugin backend starts"        wait_for "influxdb plugin" influxdb_plugin_running
@@ -206,7 +215,7 @@ grafana_post() {
         -H 'Content-Type: application/json' -X POST "http://127.0.0.1:3000$1" -d "$2"
 }
 
-SA_ID="$(grafana_post /api/serviceaccounts '{"name":"mcp","role":"Viewer"}' | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)"
+SA_ID="$(grafana_post /api/serviceaccounts '{"name":"mcp","role":"Viewer"}' | grep -oE '"id":[0-9]+' | sed -n 1p | cut -d: -f2)"
 SA_TOKEN="$(grafana_post "/api/serviceaccounts/$SA_ID/tokens" '{"name":"mcp"}' | grep -oE '"key":"[^"]+"' | cut -d'"' -f4)"
 check "viewer service account token minted" test -n "$SA_TOKEN"
 
@@ -231,19 +240,19 @@ mcp_call() {
 }
 
 MCP_INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"tig-test","version":"0"}}}'
-mcp_up() { mcp_call "" "$MCP_INIT" | grep -q '"serverInfo"'; }
+mcp_up() { mcp_call "" "$MCP_INIT" | contains '"serverInfo"'; }
 check "mcp-grafana starts with the unit's flags" wait_for mcp-grafana mcp_up
 
 MCP_SESSION="$(mcp_call "" "$MCP_INIT" | tr -d '\r' | awk -F': ' 'tolower($1) == "mcp-session-id" {print $2}')"
 mcp_call "$MCP_SESSION" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null || true
 MCP_TOOLS="$(mcp_call "$MCP_SESSION" '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')"
 
-mcp_has_tool()     { echo "$MCP_TOOLS" | grep -q "\"name\":\"$1\""; }
+mcp_has_tool()     { grep -q "\"name\":\"$1\"" <<<"$MCP_TOOLS"; }
 mcp_lacks_tool()   { ! mcp_has_tool "$1"; }
-mcp_rejects_anon() { mcp_call "" "$MCP_INIT" wrong-token | head -1 | grep -q ' 401'; }
+mcp_rejects_anon() { mcp_call "" "$MCP_INIT" wrong-token | sed -n 1p | contains ' 401'; }
 mcp_queries_influx() {
     mcp_call "$MCP_SESSION" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"query_influxdb","arguments":{"datasourceUid":"influxdb","query":"from(bucket: \"telegraf\") |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"mem\" and r._field == \"available\") |> limit(n: 1)"}}}' \
-        | grep -q 'available'
+        | contains 'available'
 }
 
 check "query_influxdb is exposed"            mcp_has_tool query_influxdb
