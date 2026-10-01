@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-01
+
+### Changed
+
+- Trend alerts are delivered by webhook to the on-call agent's alert ingress
+  (`ALERT_WEBHOOK_URL`) instead of by email. The deploy host has no working
+  outbound mail and its Nagios alerts already go to the agent; the email
+  contact point in 0.1.x could never deliver. The payload tells the agent it
+  is a trend warning: investigate, change nothing, tell a human.
+- `grafana.env` drops the `GF_SMTP_*` settings and `ALERT_EMAIL`.
+
+### Added
+
+- CI posts a sample alert through the shipped contact point to a sink and
+  asserts the payload is valid JSON with the expected fields.
+
 ## [0.1.2] - 2026-09-30
 
 ### Fixed

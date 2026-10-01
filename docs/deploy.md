@@ -22,7 +22,7 @@ mounted), and `<name>.service` is a copy of the installed unit.
 3. **Telegraf.** Install `telegraf.conf` and a `db-containers.conf` to
    `config/etc/`, put the write token in `config/telegraf.env`, start the unit.
 4. **Grafana.** Install `deploy/grafana/` to `config/etc/`, put the read token,
-   admin password, SMTP relay and alert address in `config/grafana.env`, start
+   admin password and alert webhook URL in `config/grafana.env`, start
    the unit.
 5. **Proxy.** Add a virtual host forwarding to `127.0.0.1:8098`.
 6. **MCP.** Create a Viewer service account in Grafana, put its token in

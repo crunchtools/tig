@@ -26,8 +26,19 @@ left, and fires on time-to-exhaustion. Level thresholds stay in Nagios.
 
 Every rule needs three hours of history before it judges a slope, so a
 freshly restarted service's start-up ramp is not read as a trend. Rules must
-then hold for 30 minutes before notifying. Notifications go by email to
-`ALERT_EMAIL`, through the SMTP relay named in `grafana.env`.
+then hold for 30 minutes before notifying.
+
+## Where alerts go
+
+To the on-call agent, as a JSON POST to `ALERT_WEBHOOK_URL` (the MCP gateway's
+alert ingress, the same door Nagios uses). There is no email path. The payload
+carries a `prompt` that tells the agent this is a trend warning and not an
+outage: investigate with `query_influxdb`, change nothing, and tell a human
+what is growing and when it runs out. Resolved notifications are not sent.
+
+The payload template lives inline in the contact point
+(`provisioning/alerting/contact-points.yaml`), so Grafana's contact-point test
+renders exactly what a real alert sends.
 
 ## Datasource
 
