@@ -78,8 +78,16 @@ check "fd walker neutralises hostile process names" \
 import sys
 sys.path.insert(0, "/usr/local/libexec/telegraf")
 import fd_types
-tag = fd_types.UNSAFE_TAG_RE.sub("_", "evil\nfd_types,comm=x files=9i d=e f")
-assert tag == "evil_fd_types_comm_x_files_9i_d_e_f", tag
+cases = {
+    "evil\nfd_types,comm=x files=9i d=e f": "evil_fd_types_comm_x_files_9i_d_e_f",
+    "a\n\nb\rc\td": "a__b_c_d",
+    "$(reboot);`id`|&\\\"": "__reboot___id_____",
+    "caf\u00e9\u2028x": "caf__x",
+    "kworker/0:1H-kblockd": "kworker/0:1H-kblockd",
+}
+for raw, want in cases.items():
+    got = fd_types.UNSAFE_TAG_RE.sub("_", raw)
+    assert got == want, (raw, got, want)
 '
 
 echo "=== Runtime tests ==="
@@ -127,7 +135,7 @@ check "fd walker data reached influxdb" \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"fd_types_total\") |> limit(n:1)' | grep -q fd_types_total"
 
 $RUNTIME run -d --name tig-test-grafana --network "$NET" \
-    --user 1502:1502 --tmpfs /var/lib/grafana:uid=1502,gid=1502 \
+    --user 1502:1502 --tmpfs /var/lib/grafana:exec,uid=1502,gid=1502 \
     -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=test-password-123 \
     -e INFLUXDB_TOKEN="$READ_TOKEN" -e ALERT_EMAIL=ops@example.com \
     -v "$REPO/deploy/grafana:/etc/grafana:ro" \
@@ -147,6 +155,8 @@ alert_rules_provisioned() { [ "$(grafana_api /api/v1/provisioning/alert-rules | 
 
 check "datasource provisioned"       datasource_provisioned
 check "datasource reaches influxdb"  datasource_healthy
+check "only the influxdb plugin backend runs" \
+    sh -c "test \"\$($RUNTIME exec tig-test-grafana ps -e -o args= | grep -c '/gpx_')\" -eq 1 && $RUNTIME exec tig-test-grafana ps -e -o args= | grep -q gpx_grafana_influxdb"
 check "four dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
 
@@ -157,6 +167,10 @@ echo "=== MCP server (upstream image, flags from the shipped unit) ==="
 MCP_UNIT="$REPO/deploy/systemd/mcp-grafana.crunchtools.com.service"
 MCP_IMAGE="$(grep -oE 'docker\.io/grafana/mcp-grafana:[0-9.]+' "$MCP_UNIT")"
 MCP_ARGS="$(sed -n '/mcp-grafana:[0-9.]* \\$/,/^ExecStop=/p' "$MCP_UNIT" | sed '1d;$d' | tr -d '\\\n')"
+
+# A unit edit that breaks this parsing must fail here, not silently test nothing.
+check "unit yields an image and read-only flags" \
+    sh -c "test -n '$MCP_IMAGE' && echo '$MCP_ARGS' | grep -q -- '--disable-write' && echo '$MCP_ARGS' | grep -q -- '--enabled-tools'"
 
 grafana_post() {
     $RUNTIME exec tig-test-grafana curl -sf -u admin:test-password-123 \

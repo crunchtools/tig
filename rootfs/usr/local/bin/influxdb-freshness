@@ -10,10 +10,13 @@
 
 set -euo pipefail
 
+# Host and token go through the environment, not flags, to stay out of the
+# process list.
+export INFLUX_HOST="http://127.0.0.1:8086"
+export INFLUX_TOKEN="${INFLUXDB_INIT_ADMIN_TOKEN:?}"
+
 newest="$(influx query --raw \
-    --host http://127.0.0.1:8086 \
     --org "${INFLUXDB_INIT_ORG:?}" \
-    --token "${INFLUXDB_INIT_ADMIN_TOKEN:?}" \
     "from(bucket: \"${INFLUXDB_INIT_BUCKET:-telegraf}\")
        |> range(start: -24h)
        |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"load1\")

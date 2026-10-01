@@ -18,8 +18,14 @@ BUCKET="${INFLUXDB_INIT_BUCKET:-telegraf}"
 ROLLUP_BUCKET="${BUCKET}_rollup"
 TOKEN="${INFLUXDB_INIT_ADMIN_TOKEN:?INFLUXDB_INIT_ADMIN_TOKEN is required}"
 
+# The influx CLI reads the host and token from the environment. Passing the
+# token as a flag would put it in the process list, which the host and the
+# collector (--pid=host) can both read.
+export INFLUX_HOST="$HOST"
+export INFLUX_TOKEN="$TOKEN"
+
 influx_cli() {
-    influx "$@" --host "$HOST" --token "$TOKEN"
+    influx "$@"
 }
 
 wait_for_influxd() {
@@ -70,13 +76,12 @@ if [ "${1:-}" = "token" ]; then
 fi
 
 if curl -sf "$HOST/api/v2/setup" | grep -q '"allowed":[[:space:]]*true'; then
-    influx setup --force --host "$HOST" \
+    influx setup --force \
         --username "${INFLUXDB_INIT_USERNAME:?INFLUXDB_INIT_USERNAME is required}" \
         --password "${INFLUXDB_INIT_PASSWORD:?INFLUXDB_INIT_PASSWORD is required}" \
         --org "$ORG" \
         --bucket "$BUCKET" \
-        --retention "${INFLUXDB_INIT_RETENTION:-90d}" \
-        --token "$TOKEN"
+        --retention "${INFLUXDB_INIT_RETENTION:-90d}"
     echo "influxdb-bootstrap: initial setup complete"
 fi
 
