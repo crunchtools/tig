@@ -33,5 +33,6 @@ buckets. The admin token stays in `influxdb.env`.
 ## Memory
 
 The container is capped at 768 MB. `deploy/influxdb/config.yml` limits the
-write cache to 256 MiB, each query to 128 MiB and compactions to one at a time;
+write cache to 256 MiB, queries to two at a time at 128 MiB each, and
+compactions to one at a time;
 `GOMEMLIMIT` in the env file keeps the Go runtime under the cap.

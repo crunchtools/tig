@@ -6,6 +6,16 @@
 # Each container runs exactly one role in the foreground as PID 1. Config comes
 # from /srv/<service>/config on the host, bind-mounted read-only at the path
 # named below (constitution XIV); nothing role-specific is baked into the image.
+#
+#   influxd   /etc/influxdb/config.yml (override with INFLUXD_CONFIG_PATH).
+#             INFLUXDB_INIT_* are read by influxdb-bootstrap, not by influxd.
+#   grafana   /etc/grafana/grafana.ini plus provisioning/ and dashboards/.
+#             GF_* override the ini; INFLUXDB_TOKEN and ALERT_EMAIL are
+#             expanded by the provisioning files.
+#   telegraf  /etc/telegraf/telegraf.conf. INFLUX_URL, INFLUX_ORG,
+#             INFLUX_BUCKET and INFLUX_TOKEN are expanded by that file.
+#
+# Exits 64 on an unknown or missing role.
 
 set -euo pipefail
 

@@ -3,6 +3,11 @@
 # Replaces `podman exec` for environments without the podman CLI
 # Usage: podman_exec.sh <container-name> <command> [args...]
 # Returns: stdout from the command, exit code from the exec
+#
+# Exit codes: the command's own exit code; 3 on a usage error or when the exec
+# session cannot be created (container missing or stopped, socket unreachable).
+# The API returns a multiplexed stream with 8-byte binary frame headers; output
+# is reduced to printable ASCII, tabs and newlines to strip them.
 
 CONTAINER="$1"
 shift

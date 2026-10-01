@@ -31,7 +31,7 @@ RUN microdnf install -y shadow-utils && \
 RUN microdnf install -y \
     "telegraf-${TELEGRAF_VERSION}" \
     "influxdb2-${INFLUXDB_VERSION}" \
-    "influxdb2-client-${INFLUX_CLI_VERSION}" \
+    "influxdb2-cli-${INFLUX_CLI_VERSION}" \
     "grafana-${GRAFANA_VERSION}" \
     python3 \
     procps-ng \

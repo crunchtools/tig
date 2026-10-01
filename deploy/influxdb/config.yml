@@ -13,6 +13,7 @@ log-level: warn
 storage-cache-max-memory-size: 268435456        # 256 MiB
 storage-cache-snapshot-memory-size: 26214400    # 25 MiB
 storage-max-concurrent-compactions: 1
-query-concurrency: 4
+# 2 x 128 MiB of queries + 256 MiB of cache stays under GOMEMLIMIT (600 MiB).
+query-concurrency: 2
 query-queue-size: 16
 query-memory-bytes: 134217728                   # 128 MiB per query

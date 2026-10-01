@@ -33,7 +33,10 @@ NET_TABLES = (
 # What a non-socket descriptor link starts with.
 PREFIX_KINDS = (("/", "files"), ("pipe:", "pipes"))
 SOCKET_RE = re.compile(r"^socket:\[(\d+)\]$")
-ESCAPE_RE = re.compile(r"([,= ])")
+# A process chooses its own name (prctl PR_SET_NAME) and may put anything in it,
+# including a newline followed by a forged line-protocol record. Anything
+# outside this set becomes "_" before the name is used as a tag value.
+UNSAFE_TAG_RE = re.compile(r"[^A-Za-z0-9_.:/@+-]")
 
 
 def socket_table(pid: str) -> dict[str, str]:
@@ -92,7 +95,7 @@ def main() -> int:
     for comm, row in sorted(counts.items()):
         for key, value in row.items():
             total[key] += value
-        tag = ESCAPE_RE.sub(r"\\\1", comm)
+        tag = UNSAFE_TAG_RE.sub("_", comm)
         emit(f"fd_types,comm={tag}", row)
     emit("fd_types_total", total)
     return 0

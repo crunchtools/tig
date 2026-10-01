@@ -19,6 +19,15 @@ agent → MCP gateway → mcp-grafana:8029 → grafana:3000 → influxdb:8086
 `MCP_GRAFANA_SERVER_TOKEN` makes the server require a bearer token from the
 gateway; `--allowed-hosts` restricts the `Host` header to the container name.
 
+## Tested in CI
+
+`tests/test-image.sh` reads the image tag and flags out of
+`deploy/systemd/mcp-grafana.crunchtools.com.service`, starts the upstream
+server with them against a Grafana running this repo's provisioning, and
+asserts: a Viewer service-account token is enough, a wrong caller token gets
+401, `query_influxdb` is listed and returns data, and no write tool is listed.
+Changing a flag in the unit is therefore tested before it is deployed.
+
 ## Tools worth exposing
 
 | Tool | Use |

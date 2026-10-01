@@ -48,7 +48,7 @@ wait_for() {
 }
 
 cleanup() {
-    $RUNTIME rm -f tig-test-influxdb tig-test-grafana >/dev/null 2>&1 || true
+    $RUNTIME rm -f tig-test-influxdb tig-test-grafana tig-test-mcp >/dev/null 2>&1 || true
     $RUNTIME network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -70,6 +70,17 @@ check "grafana uid is 1502"      in_image "test \"\$(id -u grafana)\" = 1502"
 check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$? -eq 64"
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
+
+# A process picks its own name; one containing a newline must not be able to
+# forge a second line-protocol record.
+check "fd walker neutralises hostile process names" \
+    $RUNTIME run --rm --entrypoint python3 "$IMAGE" -c '
+import sys
+sys.path.insert(0, "/usr/local/libexec/telegraf")
+import fd_types
+tag = fd_types.UNSAFE_TAG_RE.sub("_", "evil\nfd_types,comm=x files=9i d=e f")
+assert tag == "evil_fd_types_comm_x_files_9i_d_e_f", tag
+'
 
 echo "=== Runtime tests ==="
 
@@ -139,9 +150,74 @@ check "datasource reaches influxdb"  datasource_healthy
 check "four dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
 
+echo "=== MCP server (upstream image, flags from the shipped unit) ==="
+
+# The image and its arguments are read out of the unit, so this exercises the
+# flags that actually get deployed rather than a copy of them.
+MCP_UNIT="$REPO/deploy/systemd/mcp-grafana.crunchtools.com.service"
+MCP_IMAGE="$(grep -oE 'docker\.io/grafana/mcp-grafana:[0-9.]+' "$MCP_UNIT")"
+MCP_ARGS="$(sed -n '/mcp-grafana:[0-9.]* \\$/,/^ExecStop=/p' "$MCP_UNIT" | sed '1d;$d' | tr -d '\\\n')"
+
+grafana_post() {
+    $RUNTIME exec tig-test-grafana curl -sf -u admin:test-password-123 \
+        -H 'Content-Type: application/json' -X POST "http://127.0.0.1:3000$1" -d "$2"
+}
+
+SA_ID="$(grafana_post /api/serviceaccounts '{"name":"mcp","role":"Viewer"}' | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)"
+SA_TOKEN="$(grafana_post "/api/serviceaccounts/$SA_ID/tokens" '{"name":"mcp"}' | grep -oE '"key":"[^"]+"' | cut -d'"' -f4)"
+check "viewer service account token minted" test -n "$SA_TOKEN"
+
+# shellcheck disable=SC2086  # MCP_ARGS is a flag list and must word-split
+$RUNTIME run -d --name tig-test-mcp --network "$NET" --network-alias mcp-grafana \
+    -e GRAFANA_URL=http://tig-test-grafana:3000 \
+    -e GRAFANA_SERVICE_ACCOUNT_TOKEN="$SA_TOKEN" \
+    -e MCP_GRAFANA_SERVER_TOKEN=test-caller-token \
+    "$MCP_IMAGE" $MCP_ARGS >/dev/null
+
+# One JSON-RPC call to the MCP endpoint from inside the test network, so the
+# Host header is the container name the unit's --allowed-hosts expects.
+mcp_call() {
+    local session="$1" body="$2" auth="${3:-test-caller-token}"
+    $RUNTIME run --rm --network "$NET" --entrypoint curl "$IMAGE" -s -i -m 20 \
+        -X POST http://mcp-grafana:8029/mcp \
+        -H "Authorization: Bearer $auth" \
+        -H 'Content-Type: application/json' \
+        -H 'Accept: application/json, text/event-stream' \
+        ${session:+-H "Mcp-Session-Id: $session"} \
+        -d "$body"
+}
+
+MCP_INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"tig-test","version":"0"}}}'
+mcp_up() { mcp_call "" "$MCP_INIT" | grep -q '"serverInfo"'; }
+check "mcp-grafana starts with the unit's flags" wait_for mcp-grafana mcp_up
+
+MCP_SESSION="$(mcp_call "" "$MCP_INIT" | tr -d '\r' | awk -F': ' 'tolower($1) == "mcp-session-id" {print $2}')"
+mcp_call "$MCP_SESSION" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null || true
+MCP_TOOLS="$(mcp_call "$MCP_SESSION" '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')"
+
+mcp_has_tool()     { echo "$MCP_TOOLS" | grep -q "\"name\":\"$1\""; }
+mcp_lacks_tool()   { ! mcp_has_tool "$1"; }
+mcp_rejects_anon() { mcp_call "" "$MCP_INIT" wrong-token | head -1 | grep -q ' 401'; }
+mcp_queries_influx() {
+    mcp_call "$MCP_SESSION" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"query_influxdb","arguments":{"datasourceUid":"influxdb","query":"from(bucket: \"telegraf\") |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"mem\" and r._field == \"available\") |> limit(n: 1)"}}}' \
+        | grep -q 'available'
+}
+
+check "query_influxdb is exposed"            mcp_has_tool query_influxdb
+check "list_datasources is exposed"          mcp_has_tool list_datasources
+check "search_dashboards is exposed"         mcp_has_tool search_dashboards
+check "update_dashboard is not exposed"      mcp_lacks_tool update_dashboard
+check "create_annotation is not exposed"     mcp_lacks_tool create_annotation
+check "wrong caller token is rejected"       mcp_rejects_anon
+check "a Flux query returns data end to end" mcp_queries_influx
+
 if [ "$FAIL" -gt 0 ]; then
     echo "--- grafana log tail ---"
     $RUNTIME logs --tail 60 tig-test-grafana 2>&1 || true
+    echo "--- mcp-grafana log tail ---"
+    $RUNTIME logs --tail 40 tig-test-mcp 2>&1 || true
+    echo "--- mcp tools/list response ---"
+    echo "${MCP_TOOLS:-}" | cut -c1-2000
     echo "--- influxdb log tail ---"
     $RUNTIME logs --tail 30 tig-test-influxdb 2>&1 || true
 fi
