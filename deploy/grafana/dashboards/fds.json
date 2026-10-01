@@ -165,7 +165,8 @@
           },
           "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"fd_types\" and (r._field == \"files\") and r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"comm\"])\n  |> group(columns: [\"comm\"])\n  |> yield(name: \"mean\")"
         }
-      ]
+      ],
+      "maxDataPoints": 300
     },
     {
       "id": 4,
@@ -215,7 +216,8 @@
           },
           "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"fd_types\" and (r._field == \"pipes\") and r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"comm\"])\n  |> group(columns: [\"comm\"])\n  |> yield(name: \"mean\")"
         }
-      ]
+      ],
+      "maxDataPoints": 300
     },
     {
       "id": 5,
@@ -265,7 +267,8 @@
           },
           "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"fd_types\" and (r._field == \"tcp\") and r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"comm\"])\n  |> group(columns: [\"comm\"])\n  |> yield(name: \"mean\")"
         }
-      ]
+      ],
+      "maxDataPoints": 300
     },
     {
       "id": 6,
@@ -315,7 +318,8 @@
           },
           "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"fd_types\" and (r._field == \"unix\") and r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"comm\"])\n  |> group(columns: [\"comm\"])\n  |> yield(name: \"mean\")"
         }
-      ]
+      ],
+      "maxDataPoints": 300
     },
     {
       "id": 7,
@@ -365,7 +369,8 @@
           },
           "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"fd_types\" and (r._field == \"udp\") and r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"comm\"])\n  |> group(columns: [\"comm\"])\n  |> yield(name: \"mean\")"
         }
-      ]
+      ],
+      "maxDataPoints": 300
     }
   ]
 }

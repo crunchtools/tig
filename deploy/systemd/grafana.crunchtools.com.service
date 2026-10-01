@@ -33,6 +33,7 @@ ExecStart=/usr/bin/podman run \
     --network-alias grafana \
     -p 127.0.0.1:8098:3000 \
     --env-file /srv/grafana.crunchtools.com/config/grafana.env \
+    -e GOMEMLIMIT=400MiB \
     -v /srv/grafana.crunchtools.com/config/etc:/etc/grafana:ro,Z \
     -v /srv/grafana.crunchtools.com/data:/var/lib/grafana:Z \
     quay.io/crunchtools/tig:latest grafana
