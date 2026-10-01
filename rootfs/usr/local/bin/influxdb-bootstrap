@@ -3,11 +3,16 @@
 #
 # Usage (from the unit's ExecStartPost, inside the running container):
 #   influxdb-bootstrap            initial setup, rollup bucket, rollup task
-#   influxdb-bootstrap token <write|read>
-#                                 mint a bucket-scoped token and print it
+#   influxdb-bootstrap token write
+#                                 mint and print a token that can only write
+#                                 the raw bucket (for the Telegraf collector)
+#   influxdb-bootstrap token read
+#                                 mint and print a token that can only read
+#                                 the raw and rollup buckets (for Grafana)
 #
 # Reads INFLUXDB_INIT_{USERNAME,PASSWORD,ORG,BUCKET,RETENTION,ADMIN_TOKEN} from
-# the container environment (the unit's --env-file). Safe to run on every
+# the container environment (the unit's --env-file). RETENTION is whole days,
+# written like "90d". No secret is ever passed as a command-line argument. Safe to run on every
 # start: each step checks before it acts.
 
 set -euo pipefail
@@ -26,6 +31,22 @@ export INFLUX_TOKEN="$TOKEN"
 
 influx_cli() {
     influx "$@"
+}
+
+# Prints the JSON body for POST /api/v2/setup, built from the environment.
+# INFLUXDB_INIT_RETENTION is a whole number of days, written like "90d".
+setup_request() {
+    python3 -c '
+import json, os
+days = int(os.environ.get("INFLUXDB_INIT_RETENTION", "90d").rstrip("d"))
+print(json.dumps({
+    "username": os.environ["INFLUXDB_INIT_USERNAME"],
+    "password": os.environ["INFLUXDB_INIT_PASSWORD"],
+    "org": os.environ["INFLUXDB_INIT_ORG"],
+    "bucket": os.environ.get("INFLUXDB_INIT_BUCKET", "telegraf"),
+    "retentionPeriodSeconds": days * 86400,
+    "token": os.environ["INFLUXDB_INIT_ADMIN_TOKEN"],
+}))'
 }
 
 wait_for_influxd() {
@@ -76,12 +97,12 @@ if [ "${1:-}" = "token" ]; then
 fi
 
 if curl -sf "$HOST/api/v2/setup" | grep -q '"allowed":[[:space:]]*true'; then
-    influx setup --force \
-        --username "${INFLUXDB_INIT_USERNAME:?INFLUXDB_INIT_USERNAME is required}" \
-        --password "${INFLUXDB_INIT_PASSWORD:?INFLUXDB_INIT_PASSWORD is required}" \
-        --org "$ORG" \
-        --bucket "$BUCKET" \
-        --retention "${INFLUXDB_INIT_RETENTION:-90d}"
+    # Straight to the setup API with the request body on stdin. `influx setup`
+    # takes the password as a flag, which would put it in the process list.
+    : "${INFLUXDB_INIT_USERNAME:?INFLUXDB_INIT_USERNAME is required}"
+    : "${INFLUXDB_INIT_PASSWORD:?INFLUXDB_INIT_PASSWORD is required}"
+    setup_request | curl -sf -o /dev/null -X POST "$HOST/api/v2/setup" \
+        -H 'Content-Type: application/json' --data-binary @-
     echo "influxdb-bootstrap: initial setup complete"
 fi
 

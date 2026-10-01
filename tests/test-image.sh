@@ -137,6 +137,22 @@ freshness_reports_no_data() {
     [ "$($RUNTIME exec -e INFLUXDB_INIT_BUCKET=telegraf_rollup tig-test-influxdb /usr/local/bin/influxdb-freshness)" = "-1" ]
 }
 check "freshness helper reports -1 with no data" freshness_reports_no_data
+
+# The task only fires on the hour, so run its script as a query. That executes
+# the real Flux — the import, both aggregations and the write — against the
+# points Telegraf just stored.
+rollup_script_runs() {
+    $RUNTIME exec -e INFLUX_HOST=http://127.0.0.1:8086 -e INFLUX_TOKEN=test-admin-token tig-test-influxdb \
+        influx query --org crunchtools --file /usr/local/share/tig/rollup.flux >/dev/null
+}
+rollup_bucket_has() {
+    $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$READ_TOKEN" \
+        "from(bucket:\"telegraf_rollup\") |> range(start:-2h, stop: 2h) |> filter(fn:(r)=>r._measurement==\"$1\") |> limit(n:1)" \
+        | grep -q "$1"
+}
+check "rollup script executes"               rollup_script_runs
+check "rollup wrote a gauge (mem)"           rollup_bucket_has mem
+check "rollup wrote the fd totals"           rollup_bucket_has fd_types_total
 check "fd walker data reached influxdb" \
     sh -c "$RUNTIME exec tig-test-influxdb influx query --org crunchtools --token '$READ_TOKEN' \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"fd_types_total\") |> limit(n:1)' | grep -q fd_types_total"
