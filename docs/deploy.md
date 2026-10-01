@@ -27,7 +27,8 @@ mounted), and `<name>.service` is a copy of the installed unit.
 5. **Proxy.** Add a virtual host forwarding to `127.0.0.1:8098`.
 6. **MCP.** Create a Viewer service account in Grafana, put its token in
    `config/mcp-grafana.env`, start the unit, add the backend to the gateway.
-7. **Monitoring.** Install `deploy/nagios/tig.cfg` and the commands in
+7. **Monitoring.** Install `deploy/nagios/tig.cfg` (self-contained: it joins
+   the hostgroups and NRPE pool servicegroups itself) and the commands in
    `nrpe-commands.cfg`. The `check_tig_freshness.sh` plugin ships in
    `crunchtools/nagios-agent`.
 
@@ -44,6 +45,6 @@ The `tig` units carry `io.containers.autoupdate=registry` and follow `latest`.
 | Container | Cap |
 |-----------|-----|
 | influxdb | 768m |
-| grafana | 384m |
+| grafana | 512m |
 | telegraf | 192m |
 | mcp-grafana | 128m |

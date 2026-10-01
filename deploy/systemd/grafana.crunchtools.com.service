@@ -23,8 +23,8 @@ ExecStart=/usr/bin/podman run \
     --health-on-failure kill \
     --label io.containers.autoupdate=registry \
     --label PODMAN_SYSTEMD_UNIT=grafana.crunchtools.com.service \
-    --memory=384m \
-    --memory-swap=384m \
+    --memory=512m \
+    --memory-swap=512m \
     --rm \
     --name grafana.crunchtools.com \
     --hostname grafana.crunchtools.com \

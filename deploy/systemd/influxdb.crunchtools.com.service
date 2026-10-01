@@ -39,7 +39,16 @@ ExecStart=/usr/bin/podman run \
     quay.io/crunchtools/tig:latest influxd
 # First start: initial setup. Every start: make sure the rollup bucket and task
 # still exist. Idempotent; see rootfs/usr/local/bin/influxdb-bootstrap.
-ExecStartPost=/usr/bin/podman exec influxdb.crunchtools.com /usr/local/bin/influxdb-bootstrap
+#
+# With Type=simple, ExecStartPost runs the moment podman is forked, before the
+# container exists. A bare `podman exec` fails there and systemd then kills the
+# unit, so wait until the container accepts an exec before running the
+# bootstrap (which does its own wait for influxd to answer).
+ExecStartPost=/usr/bin/bash -c 'for attempt in {1..60}; do \
+    /usr/bin/podman exec influxdb.crunchtools.com true 2>/dev/null && \
+        exec /usr/bin/podman exec influxdb.crunchtools.com /usr/local/bin/influxdb-bootstrap; \
+    sleep 1; \
+done; echo "influxdb.crunchtools.com never accepted an exec" >&2; exit 1'
 ExecStop=/usr/bin/podman stop -t 30 influxdb.crunchtools.com
 ExecStopPost=/usr/bin/podman rm -f influxdb.crunchtools.com
 

@@ -112,6 +112,25 @@ READ_TOKEN="$($RUNTIME exec tig-test-influxdb /usr/local/bin/influxdb-bootstrap 
 check "write token minted" test -n "$WRITE_TOKEN"
 check "read token minted"  test -n "$READ_TOKEN"
 
+# Load the WHOLE shipped config, every plugin. An option a plugin no longer
+# accepts is fatal at startup, and a deprecated one will be: the filtered run
+# below never loads the docker, net or disk inputs, so it cannot catch either.
+# Gather errors (no Podman socket here) are expected and ignored; only what
+# Telegraf says about the config itself matters.
+full_config_loads_cleanly() {
+    local output
+    output="$($RUNTIME run --rm \
+        -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
+        -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN=unused \
+        -v "$REPO/deploy/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+        "$IMAGE" telegraf --test 2>&1 || true)"
+    if grep -E 'loading config file .* failed|DeprecationWarning' <<<"$output"; then
+        return 1
+    fi
+    grep -q '^> mem,' <<<"$output"
+}
+check "full telegraf config loads with no errors or deprecations" full_config_loads_cleanly
+
 # The shipped config, restricted to inputs that need no host access.
 check "telegraf writes with the shipped config" \
     $RUNTIME run --rm --network "$NET" \
