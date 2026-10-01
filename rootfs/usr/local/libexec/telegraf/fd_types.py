@@ -3,7 +3,8 @@
 
 Walks /proc/<pid>/fd for every process on the host and classifies each
 descriptor as a regular file, pipe, TCP socket, UDP socket, Unix socket or
-other. Emits InfluxDB line protocol, one line per process name plus a host
+other. A process holding no descriptors, which is every kernel thread, is
+skipped. Emits InfluxDB line protocol, one line per process name plus a host
 total:
 
     fd_types,comm=httpd files=412i,pipes=38i,tcp=12i,udp=0i,unix=6i,other=9i,procs=11i
@@ -84,7 +85,12 @@ def main() -> int:
             fds = os.listdir(f"{PROC}/{pid}/fd")
             netns = os.readlink(f"{PROC}/{pid}/ns/net")
         except OSError:
-            continue  # exited mid-walk, or a kernel thread with no fd table
+            continue  # exited mid-walk
+        # A kernel thread lists an empty fd directory rather than failing, and
+        # kworkers rename themselves per job ("kworker/3:1-xfs-conv/sda4"), so
+        # emitting them puts a new tag value in the bucket every few seconds.
+        if not fds:
+            continue
 
         if netns not in tables:
             tables[netns] = socket_table(pid)

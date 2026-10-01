@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-01
+
+### Fixed
+
+- The per-process panels of the Sockets, Pipes and Files dashboard failed with
+  `max series limit exceeded`. `fd_types.py` emitted a record for every kernel
+  thread, and kworkers rename themselves per job, so one host produced 1252
+  process names in a day against Grafana's cap of 1000 series per query. The
+  collector now skips a process holding no descriptors, and the panels drop
+  zero-valued points so the names already stored no longer count.
+  `fd_types_total.procs` counts processes that hold descriptors.
+- Compiled `__pycache__` files are no longer tracked or copied into the image.
+
 ## [0.2.0] - 2026-10-01
 
 ### Changed

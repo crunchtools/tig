@@ -9,7 +9,9 @@ tests/test-image.sh does this in CI. Standard library only; the image carries
 no test framework.
 """
 
+import contextlib
 import importlib
+import io
 import struct
 import sys
 import tempfile
@@ -90,6 +92,39 @@ class DescriptorClassification(unittest.TestCase):
 
     def test_missing_proc_entry_gives_an_empty_table(self) -> None:
         self.assertEqual(fd_types.socket_table("0"), {})
+
+
+class KernelThreads(unittest.TestCase):
+    """A kworker's name changes per job; emitting it grows the tag set forever."""
+
+    def test_a_process_with_no_descriptors_is_not_emitted(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            for pid, comm, targets in (
+                ("42", "httpd", ["/var/log/messages", "pipe:[4242]"]),
+                ("43", "kworker/3:1-xfs-conv/sda4", []),
+            ):
+                fd_dir = Path(root, pid, "fd")
+                fd_dir.mkdir(parents=True)
+                Path(root, pid, "comm").write_text(f"{comm}\n")
+                Path(root, pid, "ns").mkdir()
+                Path(root, pid, "ns", "net").symlink_to("net:[4026531840]")
+                for number, target in enumerate(targets):
+                    (fd_dir / str(number)).symlink_to(target)
+            original = fd_types.PROC
+            fd_types.PROC = root
+            written = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(written):
+                    fd_types.main()
+            finally:
+                fd_types.PROC = original
+        self.assertEqual(
+            written.getvalue().splitlines(),
+            [
+                "fd_types,comm=httpd files=1i,pipes=1i,tcp=0i,udp=0i,unix=0i,other=0i,procs=1i",
+                "fd_types_total files=1i,pipes=1i,tcp=0i,udp=0i,unix=0i,other=0i,procs=1i",
+            ],
+        )
 
 
 class ExecStreamDemux(unittest.TestCase):

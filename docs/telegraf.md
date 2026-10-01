@@ -32,7 +32,10 @@ container.
 `fd_types.py` walks `/proc/<pid>/fd` for every process. A descriptor link only
 says `socket:[inode]`, so the script resolves TCP, UDP and Unix by looking the
 inode up in `/proc/<pid>/net/*`, cached per network namespace. Output is summed
-by process name to keep the series count bounded.
+by process name to keep the series count bounded. A process holding no
+descriptors is skipped: that is every kernel thread, and kworkers rename
+themselves per job, which would otherwise add a tag value every few seconds.
+`fd_types_total.procs` therefore counts processes that hold descriptors.
 
 ## Database counters
 
