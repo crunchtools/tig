@@ -30,8 +30,9 @@ then hold for 30 minutes before notifying.
 
 ## Where alerts go
 
-To the on-call agent, as a JSON POST to `ALERT_WEBHOOK_URL` (the MCP gateway's
-alert ingress, the same door Nagios uses). There is no email path. The payload
+To the on-call agent, as a JSON POST to `ALERT_WEBHOOK_URL` with
+`ALERT_WEBHOOK_TOKEN` as a Bearer token (the MCP gateway's alert ingress, the
+same door Nagios uses). There is no email path. The payload
 carries a `prompt` that tells the agent this is a trend warning and not an
 outage: investigate with `query_influxdb`, change nothing, and tell a human
 what is growing and when it runs out. Resolved notifications are not sent.

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-01
+
+### Changed
+
+- The alert contact point sends its token as `Authorization: Bearer` from
+  `ALERT_WEBHOOK_TOKEN`; `ALERT_WEBHOOK_URL` no longer carries it. Every
+  access log on the way records the URL (mcp-trentina #333). Upgrade: set
+  `ALERT_WEBHOOK_URL` to the bare `/alert` endpoint and add
+  `ALERT_WEBHOOK_TOKEN`; the gateway needs mcp-trentina 0.52.0.
+
 ## [0.2.2] - 2026-10-01
 
 ### Fixed
