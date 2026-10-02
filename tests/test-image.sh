@@ -189,6 +189,7 @@ $RUNTIME run -d --name tig-test-grafana --network "$NET" \
     --user 1502:1502 --tmpfs /var/lib/grafana:exec,uid=1502,gid=1502 \
     -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=test-password-123 \
     -e INFLUXDB_TOKEN="$READ_TOKEN" -e ALERT_WEBHOOK_URL=http://alert-sink:9000/alert \
+    -e ALERT_WEBHOOK_TOKEN=sink-token \
     -v "$REPO/deploy/grafana:/etc/grafana:ro" \
     "$IMAGE" grafana >/dev/null
 
@@ -268,7 +269,12 @@ assert payload["service"] == "Disk fills within 7 days", payload["service"]
 contact_point_is_webhook() {
     grafana_api /api/v1/provisioning/contact-points | contains '"type":"webhook"'
 }
+# The token rides in a header, never in the URL (mcp-trentina #333).
+contact_point_sends_bearer() {
+    grafana_api /api/v1/provisioning/contact-points | contains '"authorization_scheme":"Bearer"'
+}
 check "contact point is the agent webhook"   contact_point_is_webhook
+check "contact point sends a bearer token"   contact_point_sends_bearer
 check "sample alert is delivered"            send_sample_alert
 check "delivered payload has the right shape" sink_payload_is_correct
 

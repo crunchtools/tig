@@ -3,8 +3,10 @@ apiVersion: 1
 # Trend alerts go where the Nagios alerts go: to the on-call agent, through the
 # MCP gateway's alert ingress. There is no email path on the deploy host.
 #
-# The ingress URL embeds its own token and comes from ALERT_WEBHOOK_URL in
-# grafana.env (constitution XVII: nothing identifying in a public repo).
+# The ingress URL is ALERT_WEBHOOK_URL and its token ALERT_WEBHOOK_TOKEN, both
+# from grafana.env (constitution XVII: nothing identifying in a public repo).
+# The token goes as an Authorization header, never in the URL: every access
+# log between here and the gateway records the URL (mcp-trentina #333).
 #
 # The payload template is self-contained rather than a named notification
 # template, so Grafana's contact-point test renders exactly what a real alert
@@ -22,6 +24,8 @@ contactPoints:
         settings:
           url: $ALERT_WEBHOOK_URL
           httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $ALERT_WEBHOOK_TOKEN
           payload:
             template: |-
               {{ coll.Dict
