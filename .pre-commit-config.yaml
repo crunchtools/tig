@@ -1,12 +1,14 @@
 repos:
-  - repo: local
+  # ruff runs from its own pre-commit environment, not a host install
+  # (constitution XII, host contract).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
     hooks:
       - id: ruff-check
-        name: Ruff (Python lint)
-        entry: ruff check
-        language: system
         files: \.py$
         stages: [pre-commit, pre-merge-commit]
+  - repo: local
+    hooks:
       - id: gourmand
         name: Gourmand (AI slop detection)
         entry: podman --events-backend=none run --rm --log-driver=none -v .:/src:Z -w /src quay.io/crunchtools/gourmand:latest check --full
