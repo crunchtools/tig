@@ -223,7 +223,8 @@ echo "=== disk-time-to-full (shipped rule, synthetic day of disk data) ==="
 # The rule is read back from Grafana and its queries and expressions are run
 # through the alerting evaluator, so this is the condition that ships. An
 # image pull is the case it exists for: a step that the 6-hour rate alone
-# projects to a full disk, and the 24-hour rate does not.
+# projects to a full disk, and the 24-hour rate does not. Growth that has
+# already stopped is the mirror case, and shows the 6-hour term is needed too.
 write_disk_points() {
     python3 "$REPO/tests/disk_trend_points.py" | $RUNTIME exec -i tig-test-influxdb \
         influx write --org crunchtools --bucket telegraf --token test-admin-token --precision s
@@ -262,12 +263,14 @@ seen = json.loads(sys.stdin.read())
 verdict, hours6, hours24 = seen["C"], seen["hours6"], seen["hours24"]
 assert hours6["/step"] < 168 < hours24["/step"], ("the step must trip only the 6-hour rate", seen)
 assert verdict["/step"] == 0, ("a one-off step fired", seen)
+assert hours24["/stopped"] < 168 and "/stopped" not in hours6, ("stopped growth must trip only the 24-hour rate", seen)
+assert verdict["/stopped"] == 0, ("growth that stopped eight hours ago fired", seen)
 assert verdict["/leak"] == 1, ("sustained growth did not fire", seen)
 assert verdict["/flat"] == 0, ("a flat disk fired", seen)
 '
 }
-check "synthetic disk points written"                   write_disk_points
-check "a step is ignored, a leak fires, flat is quiet"  disk_rule_judges_correctly
+check "synthetic disk points written"            write_disk_points
+check "only growth on both windows fires"         disk_rule_judges_correctly
 
 echo "=== Alert webhook (shipped contact point, sample alert) ==="
 
