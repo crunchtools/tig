@@ -4,6 +4,11 @@
 # left, and fires on time-to-exhaustion rather than on a level. Nagios owns the
 # level thresholds; these only answer "is it about to break?".
 #
+# disk-time-to-full also requires the 24-hour rate to agree. A one-off step of
+# X bytes reads as X/6 per hour for six hours, so on the 6-hour rate alone any
+# image pull over 1/28 of the free space "filled the disk within 7 days". With
+# both windows a step has to exceed 1/7 of the free space.
+#
 # Warm-up guard: every rule also requires six 30-minute slope samples (N >= 6),
 # that is three hours of history. A slope over twenty minutes of data is the
 # start-up ramp of whatever was just restarted, not a trend.
@@ -26,6 +31,23 @@ groups:
       datasourceUid: influxdb
       model:
         refId: A
+        query: |-
+          from(bucket: "telegraf")
+            |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+            |> filter(fn: (r) => r._measurement == "disk" and r._field == "used")
+            |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+            |> derivative(unit: 1h, nonNegative: false)
+            |> keep(columns: ["_time", "_value", "path"])
+            |> group(columns: ["path"])
+        intervalMs: 30000
+        maxDataPoints: 1000
+    - refId: A24
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: influxdb
+      model:
+        refId: A24
         query: |-
           from(bucket: "telegraf")
             |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
@@ -61,6 +83,15 @@ groups:
         reducer: mean
         settings:
           mode: dropNN
+    - refId: RA24
+      datasourceUid: __expr__
+      model:
+        refId: RA24
+        type: reduce
+        expression: A24
+        reducer: mean
+        settings:
+          mode: dropNN
     - refId: RB
       datasourceUid: __expr__
       model:
@@ -84,14 +115,14 @@ groups:
       model:
         refId: C
         type: math
-        expression: $N >= 6 && ($RA > 0 && ($RB / $RA) < 168)
+        expression: $N >= 6 && $RA > 0 && $RA24 > 0 && ($RB / $RA) < 168 && ($RB / $RA24) < 168
     noDataState: OK
     execErrState: Error
     for: 30m
     labels:
       severity: warning
     annotations:
-      summary: At the growth rate of the last 6 hours, {{ $labels.path }} is full in under 7 days.
+      summary: At the growth rate of both the last 6 and the last 24 hours, {{ $labels.path }} is full in under 7 days.
   - uid: memory-time-to-exhaustion
     title: Available memory exhausted within 24 hours
     condition: C

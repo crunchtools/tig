@@ -19,7 +19,7 @@ left, and fires on time-to-exhaustion. Level thresholds stay in Nagios.
 
 | Rule | Fires when |
 |------|------------|
-| `disk-time-to-full` | a filesystem fills in under 7 days at the current growth rate |
+| `disk-time-to-full` | a filesystem fills in under 7 days at both the 6-hour and the 24-hour growth rate |
 | `memory-time-to-exhaustion` | available memory runs out in under 24 hours |
 | `swap-growth` | swap in use grew more than 1 GiB in 6 hours |
 | `container-memory-time-to-limit` | a container above 60% of its limit reaches it in under 12 hours |
@@ -27,6 +27,11 @@ left, and fires on time-to-exhaustion. Level thresholds stay in Nagios.
 Every rule needs three hours of history before it judges a slope, so a
 freshly restarted service's start-up ramp is not read as a trend. Rules must
 then hold for 30 minutes before notifying.
+
+`disk-time-to-full` needs both windows to agree because disk grows in steps.
+An image pull is one step; averaged over six hours it looks like a slope, and
+on that window alone any pull over 1/28 of the free space raised the alert.
+With the 24-hour rate as well, a step has to exceed 1/7 of the free space.
 
 ## Where alerts go
 
