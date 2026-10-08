@@ -14,6 +14,16 @@ All notable changes to this project are documented here. The format follows
   `.github/workflows/constitution.yml`.
 - Dependabot auto-merges GitHub Actions minor and patch updates.
 
+### Fixed
+
+- `disk-time-to-full` no longer fires on a single image pull. It projected
+  from the 6-hour growth rate alone, so a one-off step over 1/28 of the free
+  space (about 2.3 GB on lotor) read as a slope that filled the disk within 7
+  days. The 24-hour rate must now agree, which raises the step it takes to
+  1/7 of the free space. Over one week of lotor data the old condition held
+  in 90 half-hour windows and the new one in at most 9, all in one day of
+  ~11 GB net growth.
+
 ## [0.3.0] - 2026-10-01
 
 ### Changed
