@@ -218,6 +218,57 @@ check "no other plugin backend is running"    one_plugin_backend
 check "four dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
 
+echo "=== disk-time-to-full (shipped rule, synthetic day of disk data) ==="
+
+# The rule is read back from Grafana and its queries and expressions are run
+# through the alerting evaluator, so this is the condition that ships. An
+# image pull is the case it exists for: a step that the 6-hour rate alone
+# projects to a full disk, and the 24-hour rate does not.
+write_disk_points() {
+    python3 "$REPO/tests/disk_trend_points.py" | $RUNTIME exec -i tig-test-influxdb \
+        influx write --org crunchtools --bucket telegraf --token test-admin-token --precision s
+}
+disk_rule_verdicts() {
+    $RUNTIME run --rm --network "$NET" --entrypoint python3 "$IMAGE" -c '
+import base64, json, urllib.request
+
+def call(path, body=None):
+    request = urllib.request.Request("http://tig-test-grafana:3000" + path,
+                                     data=json.dumps(body).encode() if body else None)
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Authorization", "Basic " + base64.b64encode(b"admin:test-password-123").decode())
+    return json.load(urllib.request.urlopen(request, timeout=60))
+
+rule = call("/api/v1/provisioning/alert-rules/disk-time-to-full")
+results = call("/api/v1/eval", {"data": rule["data"]})["results"]
+
+def by_path(ref):
+    values = {}
+    for frame in results[ref]["frames"]:
+        for field, column in zip(frame["schema"]["fields"], frame["data"]["values"]):
+            if "path" in field.get("labels", {}):
+                values[field["labels"]["path"]] = column[-1]
+    return values
+
+verdict, slope6, slope24, free = (by_path(ref) for ref in ("C", "RA", "RA24", "RB"))
+print(json.dumps({"C": verdict, "hours6": {p: free[p] / slope6[p] for p in slope6 if slope6[p] > 0},
+                  "hours24": {p: free[p] / slope24[p] for p in slope24 if slope24[p] > 0}}))
+'
+}
+disk_rule_judges_correctly() {
+    disk_rule_verdicts | python3 -c '
+import json, sys
+seen = json.loads(sys.stdin.read())
+verdict, hours6, hours24 = seen["C"], seen["hours6"], seen["hours24"]
+assert hours6["/step"] < 168 < hours24["/step"], ("the step must trip only the 6-hour rate", seen)
+assert verdict["/step"] == 0, ("a one-off step fired", seen)
+assert verdict["/leak"] == 1, ("sustained growth did not fire", seen)
+assert verdict["/flat"] == 0, ("a flat disk fired", seen)
+'
+}
+check "synthetic disk points written"                   write_disk_points
+check "a step is ignored, a leak fires, flat is quiet"  disk_rule_judges_correctly
+
 echo "=== Alert webhook (shipped contact point, sample alert) ==="
 
 # A sink stands in for the agent's alert ingress. Grafana's contact-point test
