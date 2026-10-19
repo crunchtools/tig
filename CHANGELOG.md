@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-19
+
 ### Changed
 
 - Trend alerts no longer page. Grafana routes every alert to a route muted
