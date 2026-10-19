@@ -53,7 +53,7 @@ muteTimes:
   - orgId: 1
     name: always
     time_intervals:
-      - weekdays: [monday:sunday]
+      - weekdays: [sunday:saturday]
 
 policies:
   - orgId: 1
