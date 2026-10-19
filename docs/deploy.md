@@ -29,7 +29,7 @@ mounted), and `<name>.service` is a copy of the installed unit.
    `config/mcp-grafana.env`, start the unit, add the backend to the gateway.
 7. **Monitoring.** Install `deploy/nagios/tig.cfg` (self-contained: it joins
    the hostgroups and NRPE pool servicegroups itself) and the commands in
-   `nrpe-commands.cfg`. The `check_tig_freshness.sh` plugin ships in
+   `nrpe-commands.cfg`. The `check_tig_freshness.sh` and `check_tig_trends.sh` plugins ship in
    `crunchtools/nagios-agent`.
 
 Units are regular files in `/etc/systemd/system/`. `/srv` is a git repository;
