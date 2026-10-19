@@ -42,6 +42,19 @@ deleteContactPoints:
   - orgId: 1
     uid: ops-email
 
+# Trend alerts do not page. They surface in Nagios as a WARNING ("Trend
+# alerts" on ctr-grafana, via /usr/local/bin/grafana-firing), and Nagios only
+# notifies the agent on CRITICAL. Every page was a no-action RCS text.
+#
+# Grafana needs a root receiver, so the webhook stays configured and a
+# catch-all route under it is muted around the clock. Removing the route is
+# the switch that turns paging back on.
+muteTimes:
+  - orgId: 1
+    name: always
+    time_intervals:
+      - weekdays: [monday:sunday]
+
 policies:
   - orgId: 1
     receiver: agent-webhook
@@ -49,3 +62,6 @@ policies:
     group_wait: 1m
     group_interval: 10m
     repeat_interval: 12h
+    routes:
+      - receiver: agent-webhook
+        mute_time_intervals: [always]

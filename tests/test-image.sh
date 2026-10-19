@@ -74,6 +74,9 @@ check "bootstrap executable"     in_image "test -x /usr/local/bin/influxdb-boots
 check "fd walker executable"     in_image "test -x /usr/local/libexec/telegraf/fd_types.py"
 check "db collector executable"  in_image "test -x /usr/local/libexec/telegraf/ctr_db_status.py"
 check "rollup task shipped"      in_image "test -r /usr/local/share/tig/rollup.flux"
+check "firing helper executable" in_image "test -x /usr/local/bin/grafana-firing"
+check "firing helper fails without grafana" \
+    sh -c "$RUNTIME run --rm -e GF_SECURITY_ADMIN_USER=a -e GF_SECURITY_ADMIN_PASSWORD=b --entrypoint /usr/local/bin/grafana-firing $IMAGE; test \$? -eq 1"
 check "influxdb uid is 1501"     in_image "test \"\$(id -u influxdb)\" = 1501"
 check "grafana uid is 1502"      in_image "test \"\$(id -u grafana)\" = 1502"
 check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$? -eq 64"
@@ -217,6 +220,23 @@ check "datasource reaches influxdb"           wait_for "datasource health" datas
 check "no other plugin backend is running"    one_plugin_backend
 check "four dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
+
+# Trend alerts must not page: every alert lands on a route muted around the
+# clock, and Nagios reads the firing rules through grafana-firing instead.
+always_mute_provisioned() { grafana_api /api/v1/provisioning/mute-timings | contains '"name":"always"'; }
+catch_all_route_muted() {
+    grafana_api /api/v1/provisioning/policies | python3 -c '
+import json, sys
+tree = json.load(sys.stdin)
+routes = tree.get("routes") or []
+assert any(not r.get("object_matchers") and not r.get("matchers") and r.get("mute_time_intervals") == ["always"]
+           for r in routes), tree
+'
+}
+firing_helper_reads_grafana() { $RUNTIME exec tig-test-grafana /usr/local/bin/grafana-firing; }
+check "always-on mute timing provisioned"   always_mute_provisioned
+check "every alert routes to the muted route" catch_all_route_muted
+check "firing helper reads the rules"       firing_helper_reads_grafana
 
 echo "=== disk-time-to-full (shipped rule, synthetic day of disk data) ==="
 

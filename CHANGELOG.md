@@ -8,11 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Trend alerts no longer page. Grafana routes every alert to a route muted
+  around the clock, and Nagios shows the firing rules as a WARNING on the new
+  `Trend alerts` service on `ctr-grafana`, which never notifies. Every trend
+  page had been a no-action RCS text.
+
 - Constitution is now a v1.18.0 manifest: it holds only what is specific to
   this repo; fleet and profile rules apply by reference.
 - Constitution validation is pinned to the inherited release via
   `.github/workflows/constitution.yml`.
 - Dependabot auto-merges GitHub Actions minor and patch updates.
+
+### Added
+
+- `/usr/local/bin/grafana-firing` prints the firing alert rules, one line per
+  rule, using the Grafana container's own admin login, for the Nagios check.
 
 ### Fixed
 

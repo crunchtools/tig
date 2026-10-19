@@ -1,0 +1,53 @@
+#!/usr/bin/python3
+"""Print the Grafana alert rules that are firing, one line per rule.
+
+Usage: grafana-firing
+
+Each line is the rule title and what it fired for (the path, host or
+container), e.g. "Disk fills within 7 days: /var, /sysroot". No output means
+nothing is firing. Exits 1 if Grafana cannot be read.
+
+Runs inside the grafana container (it reads the admin login from that
+container's own environment), so a monitoring check can call it over the
+Podman exec socket without holding any credential itself. The trend rules do
+not notify anyone; this is how Nagios sees them.
+"""
+
+import base64
+import json
+import os
+import sys
+import urllib.request
+
+# The label that says what an alert is about, in the order the rules use them.
+SUBJECT_LABELS = ("path", "container_name", "host")
+
+
+def main() -> int:
+    login = f"{os.environ['GF_SECURITY_ADMIN_USER']}:{os.environ['GF_SECURITY_ADMIN_PASSWORD']}"
+    request = urllib.request.Request(
+        "http://127.0.0.1:3000/api/prometheus/grafana/api/v1/rules",
+        headers={"Authorization": "Basic " + base64.b64encode(login.encode()).decode()},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            groups = json.load(response)["data"]["groups"]
+    except (OSError, ValueError, KeyError) as error:
+        print(f"cannot read Grafana alert rules: {error}", file=sys.stderr)
+        return 1
+
+    for group in groups:
+        for rule in group.get("rules", []):
+            subjects = []
+            for alert in rule.get("alerts") or []:
+                if alert.get("state") != "Alerting":
+                    continue
+                labels = alert.get("labels", {})
+                subjects.append(next((labels[k] for k in SUBJECT_LABELS if k in labels), "?"))
+            if subjects:
+                print(f"{rule['name']}: {', '.join(sorted(subjects))}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
