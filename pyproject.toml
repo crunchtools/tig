@@ -1,3 +1,19 @@
+# The [project] table exists so `uv lock` can pin the gate's own tools; this
+# repo is not a package, which is what `package = false` says. Without a
+# lockfile that names mypy and pytest the gate exits 2 (python-sdlc,
+# need_lock_dep) rather than reporting a pass it never ran.
+[project]
+name = "tig"
+version = "0"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = ["mypy>=1.14", "pytest>=8.3"]
+
 # Lint configuration for the Python exec inputs under rootfs/. This repo ships a
 # container image, not a Python package; there is nothing to build or install.
 
@@ -14,3 +30,28 @@ max-complexity = 10
 [tool.ruff.lint.pylint]
 max-branches = 10
 max-statements = 50
+
+# The probes that ship in the image, by path -- not a package. tests/ is left
+# out on purpose: tests/test_exec_inputs.py loads the probes with
+# `importlib.import_module` after inserting the image's install path,
+# /usr/local/libexec/telegraf, which only exists inside the built image. mypy
+# cannot resolve that indirection from a checkout and reports the monkeypatched
+# module attributes as missing.
+[tool.mypy]
+files = ["rootfs/usr/local/libexec/telegraf"]
+
+
+[tool.sdlc.push]
+# semgrep: no in-repo rules, and the check exits 2 when .semgrep is absent
+# rather than scanning nothing and calling it a pass.
+#
+# pytest: this repo's only Python tests are IMAGE tests.
+# tests/test_exec_inputs.py inserts /usr/local/libexec/telegraf -- the install
+# path inside the built image -- and tests/test-image.sh runs it there
+# (`$RUNTIME run --rm --entrypoint python3 -v "$REPO/tests:/tests:ro" "$IMAGE"
+# /tests/test_exec_inputs.py`, line 87), from build.yml. A host pytest cannot
+# import the probes, so running it here would either error or collect nothing
+# and call that a pass. Skipped with the tests still running where they always
+# have. Porting them to the `pytest-in-image` kind, so the gate owns them the
+# way it owns trentina's, is tracked separately.
+skip = ["semgrep", "pytest"]
