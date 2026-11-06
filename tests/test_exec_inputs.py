@@ -17,11 +17,18 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, "/usr/local/libexec/telegraf")
 
-ctr_db_status = importlib.import_module("ctr_db_status")
-fd_types = importlib.import_module("fd_types")
+# Typed Any deliberately. These are resolved at runtime from the image's
+# install path, so mypy sees `ModuleType`: typeshed gives that a
+# `__getattr__` but no `__setattr__`, which makes reading `fd_types.PROC`
+# fine and the monkeypatch below an `attr-defined` error. `Any` costs no
+# real checking -- attribute reads on a ModuleType were already `Any` --
+# and keeps reads and writes consistent.
+ctr_db_status: Any = importlib.import_module("ctr_db_status")
+fd_types: Any = importlib.import_module("fd_types")
 
 
 def frame(stream_id: int, payload: bytes) -> bytes:
