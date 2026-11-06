@@ -83,9 +83,6 @@ check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$?
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
 
-check "exec input unit tests" \
-    $RUNTIME run --rm --entrypoint python3 -v "$REPO/tests:/tests:ro" "$IMAGE" /tests/test_exec_inputs.py
-
 echo "=== Runtime tests ==="
 
 $RUNTIME network create "$NET" >/dev/null

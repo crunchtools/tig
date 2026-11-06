@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The telegraf probe tests now run in the `sdlc ci` gate as a
+  `pytest-in-image` check, instead of only during the image build.
+
 ## [0.4.0] - 2026-10-19
 
 ### Changed
