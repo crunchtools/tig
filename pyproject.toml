@@ -39,6 +39,11 @@ max-statements = 50
 files = ["rootfs/usr/local/libexec/telegraf", "tests"]
 mypy_path = "rootfs/usr/local/libexec/telegraf"
 
+# On a checkout the probes are not at /usr/local/libexec/telegraf, so the host
+# pytest run finds them here. Without it, collection fails and pytest exits 2.
+[tool.pytest.ini_options]
+pythonpath = ["rootfs/usr/local/libexec/telegraf"]
+
 # The probe tests need the image's install path, so the gate runs them inside
 # the built image rather than on the host.
 [tool.sdlc.ci]
