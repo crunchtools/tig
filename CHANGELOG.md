@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-08
+
 ### Fixed
 
 - Telegraf collects per-container metrics again. It is pinned to an exact
