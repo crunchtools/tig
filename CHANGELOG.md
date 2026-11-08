@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **`TELEGRAF_VERSION` is a minor glob again, not an exact pin (RT #1598).**
+  The pin existed because telegraf >= 1.39 parses a container's `Gateway`
+  through `netip.ParseAddr` and discards the entire container list on one bad
+  value, and podman 5.8.2's Docker-compat `/containers/json` rendered a
+  gatewayless network's gateway as the literal string `<nil>`. Gloval had five
+  such networks, so all 61 containers lost metrics while the collector still
+  reported healthy (RT #1567). RT #1598 gave those networks explicit gateways;
+  the compat response now carries zero `<nil>`, so no telegraf version is
+  excluded any more. The version assertion in `tests/test-image.sh` and the
+  constitution deviation are removed with the pin, since all three described the
+  same constraint. Weekly rebuilds pick up telegraf patch releases again, which
+  means a telegraf CVE no longer needs a hand edit. Upstream, unchanged and not
+  waited on: containers/podman#30149.
+
 ## [0.6.0] - 2026-11-08
 
 ### Added

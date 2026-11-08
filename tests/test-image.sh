@@ -65,15 +65,6 @@ trap cleanup EXIT
 echo "=== Static tests ==="
 
 check "telegraf runs"            in_image "telegraf --version"
-# RT#1567: telegraf is pinned to an exact version in the Containerfile rather
-# than a minor glob, because >= 1.39 fails the entire container list when podman
-# 5.8.2 reports a gatewayless network's Gateway as the literal string "<nil>".
-# This asserts the PIN, and deliberately claims nothing more: a CI runner has no
-# gatewayless network, so a gather test would pass here on a telegraf that
-# collects nothing on gloval. Lifting the pin must be verified against gloval's
-# real socket -- see the Containerfile comment for the procedure.
-check "telegraf is the pinned 1.38.4" \
-    in_image "telegraf --version | grep -q 'Telegraf 1\.38\.4'"
 check "influxd runs"             in_image "influxd version"
 check "influx CLI runs"          in_image "influx version"
 check "grafana runs"             in_image "grafana --version"
@@ -95,9 +86,10 @@ check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$?
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
 
-# RT#1567: the exec commands in the shipped config are flat strings, because
-# telegraf 1.38.4 rejects the nested ["prog", "arg"] form and fails the whole
-# config file on it. That leaves telegraf responsible for splitting "script arg"
+# RT#1567: the exec commands in the shipped config are flat strings, the one
+# form that loads on both 1.38.4 and 1.40.x -- the nested ["prog", "arg"] form
+# fails the whole config file on anything older than 1.39. That leaves telegraf
+# responsible for splitting "script arg"
 # into argv. If it ever stopped doing that, ctr_db_status.py would not run and
 # the database counters would disappear with nothing wrong in the data -- the
 # same silent shape as the bug this release fixes.

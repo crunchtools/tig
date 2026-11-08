@@ -1,6 +1,6 @@
 # TIG Container Constitution
 
-> **Version:** 1.2.0
+> **Version:** 1.3.0
 > **Ratified:** 2026-09-30
 > **Amended:** 2026-11-08
 > **Status:** Active
@@ -45,22 +45,10 @@ registration: all three programs come from their upstream RPM repositories
 no cascade rebuild.
 
 - **Version pins:** upstream RPMs are pinned by minor-version glob in build
-  `ARG`s (`INFLUXDB_VERSION`, `INFLUX_CLI_VERSION`, `GRAFANA_VERSION`). The
-  weekly rebuild takes patch releases; a minor or major bump is a reviewed edit,
-  because dashboards, alert rules and the rollup task consume those interfaces.
-- **Deviation — `TELEGRAF_VERSION` is an exact pin, not a glob.** Every telegraf
-  from 1.39.0 onward fails its entire container list against podman 5.8.2, which
-  returns the literal string `<nil>` as a gatewayless network's `Gateway`, so
-  `docker_container_*` collection stops completely while the collector still
-  reports healthy. Gloval has five gatewayless networks. Measured there: 1.38.4
-  collects all 61 series, 1.39.0 through 1.40.3 collect none. A glob reaches a
-  broken release on the next weekly rebuild, which is exactly how this shipped
-  (RT#1567). What it costs: patch releases are no longer picked up
-  automatically, so a telegraf CVE needs a deliberate edit here.
-  `tests/test-image.sh` asserts the exact version, and the Containerfile comment
-  holds the procedure for lifting the pin — which requires evidence from
-  gloval's own socket, because CI cannot reproduce the bug. Revisit when
-  upstream fixes it or the five networks are given gateways.
+  `ARG`s (`TELEGRAF_VERSION`, `INFLUXDB_VERSION`, `INFLUX_CLI_VERSION`,
+  `GRAFANA_VERSION`). The weekly rebuild takes patch releases; a minor or major
+  bump is a reviewed edit, because dashboards, alert rules and the rollup task
+  consume those interfaces.
 - **Service accounts:** fixed IDs (influxdb 1501, grafana 1502), created before
   the RPMs are installed. Containers run without user namespaces, so these IDs
   own files on the host and must not collide with anything there.
@@ -109,3 +97,4 @@ healthy.
 | 1.0.0 | 2026-09-30 | Initial constitution (RT #1461) |
 | 1.1.0 | 2026-10-02 | Manifest under constitution v1.18.0: fleet and profile restatement removed, tig specifics kept |
 | 1.2.0 | 2026-11-08 | `TELEGRAF_VERSION` carved out of the minor-glob rule as an exact pin, with the deviation and its cost recorded (RT #1567) |
+| 1.3.0 | 2026-11-08 | `TELEGRAF_VERSION` deviation removed and folded back into the minor-glob rule; supersedes 1.2.0. Gloval's five gatewayless networks were given explicit gateways, so podman no longer emits `<nil>` and no telegraf version is excluded (RT #1598) |
