@@ -22,7 +22,6 @@ mounted), and `<name>.service` is a copy of the installed unit.
 2. **Tokens.** Mint the write and read tokens (see [influxdb.md](influxdb.md)).
 3. **Telegraf.** Install `telegraf.conf` and a `db-containers.conf` to
    `config/etc/`, put the write token in `config/telegraf.env`, start the unit.
-   For OpenRouter spend, add `OPENROUTER_MANAGEMENT_KEY` to `telegraf.env`.
 4. **OTLP receiver.** Install `deploy/telegraf-otlp/telegraf.conf` to
    `config/etc/`, write `config/telegraf-otlp.env` from the example (the write
    token and a generated receiver password), start the unit. Point Trentina at

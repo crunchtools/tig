@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- The OpenRouter spend collector (`openrouter_usage.py`), its exec input and
+  the seven spend panels on the Trentina dashboard. Spend tracking is not
+  wanted, and the collector needed an OpenRouter management key, the one
+  credential here that can create and delete keys. Never deployed: the host
+  telegraf.conf on gloval did not carry the stanza.
+
 ## [0.6.0] - 2026-11-08
 
 ### Added

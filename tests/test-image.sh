@@ -82,9 +82,6 @@ check "dispatcher executable"    in_image "test -x /usr/local/bin/tig"
 check "bootstrap executable"     in_image "test -x /usr/local/bin/influxdb-bootstrap"
 check "fd walker executable"     in_image "test -x /usr/local/libexec/telegraf/fd_types.py"
 check "db collector executable"  in_image "test -x /usr/local/libexec/telegraf/ctr_db_status.py"
-check "openrouter collector executable" in_image "test -x /usr/local/libexec/telegraf/openrouter_usage.py"
-check "openrouter collector without a key reports down" \
-    sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/openrouter_usage.py $IMAGE 2>/dev/null | grep -qx 'openrouter_collector up=0i'"
 check "rollup task shipped"      in_image "test -r /usr/local/share/tig/rollup.flux"
 check "firing helper executable" in_image "test -x /usr/local/bin/grafana-firing"
 check "firing helper fails without grafana" \
@@ -304,21 +301,6 @@ check "a blocked call keeps its layer and risk tags"   otlp_blocked_call_tagged
 
 echo "=== Trentina dashboard (every shipped query runs against test data) ==="
 
-# OpenRouter points as openrouter_usage.py writes them (its unit tests pin the
-# shape), so the spend panels have rows to read.
-write_openrouter_points() {
-    local midnight now
-    midnight=$(( $(date -u +%s) / 86400 * 86400 ))
-    now=$(date -u +%s)
-    printf '%s\n' \
-        "openrouter_usage,model=google/gemini-2.5-flash-lite,key=josui cost=0.04,requests=310i,prompt_tokens=120000i,completion_tokens=4100i,reasoning_tokens=0i $midnight" \
-        "openrouter_usage,model=anthropic/claude-sonnet-4,key=kagetora cost=1.5,requests=2i $midnight" \
-        "openrouter_key,key=josui usage_daily=0.05,usage_monthly=3.1 $now" \
-        "openrouter_credits total_credits=50,total_usage=12.25,balance=37.75 $now" \
-        "openrouter_collector up=1i $now" \
-        | $RUNTIME exec -i tig-test-influxdb influx write --org crunchtools --bucket telegraf \
-            --token test-admin-token --precision s
-}
 # Grafana fills v.timeRangeStart, v.timeRangeStop and v.windowPeriod; outside
 # it, a query defines them itself. Each must run and return at least one row.
 dashboard_queries_run() {
@@ -351,7 +333,6 @@ print("\n".join(imports + [head] + rest))
     rm -f "$REPO/.trentina-queries.txt"
     return $failed
 }
-check "openrouter points written"                  write_openrouter_points
 check "every Trentina dashboard query returns rows" dashboard_queries_run
 
 $RUNTIME run -d --name tig-test-grafana --network "$NET" \
