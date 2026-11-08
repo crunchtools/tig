@@ -287,7 +287,7 @@ otlp_refuses_wrong_auth() { [ "$(otlp_post -u trentina:wrong)" = 401 ]; }
 otlp_points_count() {
     $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$READ_TOKEN" --raw \
         'from(bucket:"telegraf") |> range(start: 2026-11-01T00:00:00Z) |> filter(fn:(r)=>r._measurement=="trentina_calls" and r._field=="duration_ms") |> group() |> count()' \
-        | grep -oE ',[0-9]+$' | tr -d ,
+        | tr -d '\r' | grep -oE ',[0-9]+$' | tr -d ,
 }
 otlp_points_arrived() { [ "$(otlp_points_count)" = 5 ]; }
 otlp_blocked_call_tagged() {
