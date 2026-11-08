@@ -1,7 +1,9 @@
 # Collect: Telegraf
 
-One collector container per host, on a 30-second interval. Config is
-`deploy/telegraf/telegraf.conf`.
+Two Telegraf containers. `telegraf-host` gathers metrics from the host it runs
+on, every 30 seconds; config `deploy/telegraf-host/telegraf.conf`.
+`telegraf-receiver` receives what services send it; see
+[Trentina call traces](#trentina-call-traces).
 
 ## What it writes
 
@@ -44,7 +46,7 @@ their own loopback. `ctr_db_status.py` runs the database's own client inside
 each one over the Podman exec socket, as the local superuser, so no monitoring
 password exists anywhere. It speaks to the socket directly and decodes the
 multiplexed exec stream frame by frame. Containers are listed in
-`/srv/telegraf.crunchtools.com/config/etc/db-containers.conf`:
+`/srv/telegraf-host.crunchtools.com/config/etc/db-containers.conf`:
 
 ```
 <container-name> <mariadb|postgres> [db-user]
@@ -52,8 +54,8 @@ multiplexed exec stream frame by frame. Containers are listed in
 
 ## Trentina call traces
 
-`telegraf-otlp.crunchtools.com` is a second Telegraf with one input: an
-OTLP/HTTP receiver (`http_listener_v2`, port 4318, `/v1/traces`, basic auth)
+`telegraf-receiver.crunchtools.com` is the second Telegraf, with one input: an
+OTLP (OpenTelemetry Protocol) over HTTP receiver (`http_listener_v2`, port 4318, `/v1/traces`, basic auth)
 for the spans Trentina exports (`TRENTINA_OTLP_ENDPOINT`). Telegraf's own
 OTLP input speaks gRPC only, so the spans come as OTLP/JSON and an xpath
 parser maps each one to a `trentina_calls` point:
@@ -63,7 +65,7 @@ parser maps each one to a `trentina_calls` point:
 - fields: `duration_ms`, `bytes_arrived`, `bytes_delivered`, `success`,
   `trace_id`
 
-It runs apart from the host collector because it answers requests from other
+It runs apart from `telegraf-host` because it answers requests from other
 containers: no host network, PID namespace, socket, mounts or capabilities.
 The points keep the span's nanosecond timestamp, so two calls with the same
 tags never overwrite each other. The Trentina dashboard reads them.

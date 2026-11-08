@@ -6,9 +6,15 @@ Five containers, each with its own directory on the host (constitution XIV).
 |-----------|----------------|-----------|
 | `influxdb.crunchtools.com` | `/srv/influxdb.crunchtools.com/{config,data}` | `127.0.0.1:8099` |
 | `grafana.crunchtools.com` | `/srv/grafana.crunchtools.com/{config,data}` | `127.0.0.1:8098` |
-| `telegraf.crunchtools.com` | `/srv/telegraf.crunchtools.com/config` | none (host network) |
-| `telegraf-otlp.crunchtools.com` | `/srv/telegraf-otlp.crunchtools.com/config` | none (`crunchtools` bridge, alias `otlp`, port 4318) |
+| `telegraf-host.crunchtools.com` | `/srv/telegraf-host.crunchtools.com/config` | none (host network) |
+| `telegraf-receiver.crunchtools.com` | `/srv/telegraf-receiver.crunchtools.com/config` | none (`crunchtools` bridge, alias `telegraf-receiver`, port 4318) |
 | `mcp-grafana` | `/srv/mcp-grafana.crunchtools.com/config` | `127.0.0.1:8029` |
+
+There are two Telegrafs. `telegraf-host` gathers metrics from the host it
+runs on: the machine, its containers and their databases. `telegraf-receiver`
+gathers nothing itself; it receives what services send it, today Trentina's
+calls as OTLP (OpenTelemetry Protocol, the standard format for sending traces
+and metrics).
 
 Inside each `config/`: `etc/` is mounted read-only into the container,
 `<name>.env` holds secrets (mode 0600, passed with `--env-file`, never
@@ -20,10 +26,10 @@ mounted), and `<name>.service` is a copy of the installed unit.
    `config/influxdb.env` from the example with generated secrets, install and
    start the unit. `ExecStartPost` runs the bootstrap.
 2. **Tokens.** Mint the write and read tokens (see [influxdb.md](influxdb.md)).
-3. **Telegraf.** Install `telegraf.conf` and a `db-containers.conf` to
-   `config/etc/`, put the write token in `config/telegraf.env`, start the unit.
-4. **OTLP receiver.** Install `deploy/telegraf-otlp/telegraf.conf` to
-   `config/etc/`, write `config/telegraf-otlp.env` from the example (the write
+3. **telegraf-host.** Install `deploy/telegraf-host/telegraf.conf` and a `db-containers.conf` to
+   `config/etc/`, put the write token in `config/telegraf-host.env`, start the unit.
+4. **telegraf-receiver.** Install `deploy/telegraf-receiver/telegraf.conf` to
+   `config/etc/`, write `config/telegraf-receiver.env` from the example (the write
    token and a generated receiver password), start the unit. Point Trentina at
    it with the three settings in the example.
 5. **Grafana.** Install `deploy/grafana/` to `config/etc/`, put the read token,
@@ -65,8 +71,8 @@ metric was missing.
 |-----------|-----|
 | influxdb | 768m |
 | grafana | 1g (`GOMEMLIMIT=600MiB`) |
-| telegraf | 384m |
-| telegraf-otlp | 128m |
+| telegraf-host | 384m |
+| telegraf-receiver | 128m |
 | mcp-grafana | 128m |
 
 Grafana is a Go program and the Go runtime does not read the container's
