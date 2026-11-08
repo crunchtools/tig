@@ -129,7 +129,15 @@ PROBE
         -v "$dir/probe.conf:/etc/telegraf/probe.conf:ro,Z" \
         --entrypoint telegraf "$IMAGE" --config /etc/telegraf/probe.conf --test 2>&1)"
     rm -rf "$dir"
-    contains "db_collector,container=probe-not-a-container up=0i" <<<"$out"
+    contains "db_collector,container=probe-not-a-container up=0i" <<<"$out" && return 0
+    # Report what telegraf actually said. Without this the assertion fails with
+    # no output and the next person has to re-derive the cause from nothing,
+    # which is how the first version of this test cost an hour: it passed
+    # standalone and failed in the suite, and the SELinux denial that explained
+    # it was sitting unread in this variable.
+    echo "telegraf output was:"
+    printf '%s\n' "$out"
+    return 1
 }
 check "exec command string is split into argv" exec_command_string_reaches_argv
 
