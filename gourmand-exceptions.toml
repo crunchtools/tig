@@ -17,12 +17,6 @@ path = "rootfs/usr/local/libexec/telegraf/ctr_db_status.py"
 justification = "Telegraf exec input; telegraf.conf runs it from this libexec path. rootfs/ mirrors the image layout, so relocating it to scripts/ would put it somewhere the collector does not look."
 classification = "by_design"
 
-[[exceptions]]
-check = "random_scripts"
-path = "rootfs/usr/local/libexec/telegraf/openrouter_usage.py"
-justification = "Telegraf exec input; telegraf.conf runs it from this libexec path. rootfs/ mirrors the image layout, so relocating it to scripts/ would put it somewhere the collector does not look."
-classification = "by_design"
-
 # Absolute paths are the interface in both trees. rootfs/ files name the paths
 # they are installed to inside the image. deploy/ files are configuration for
 # daemons that take absolute paths: grafana.ini's [paths], NRPE command
