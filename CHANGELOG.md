@@ -6,7 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Telegraf collects per-container metrics again. It is pinned to an exact
+  1.38.4 instead of the `1.40.*` glob, because every telegraf from 1.39.0
+  onward fails its whole container list on gloval and collects nothing at all.
+  podman 5.8.2's Docker-compatible `/containers/json` returns the literal
+  string `<nil>` as `NetworkSettings.Networks.<net>.Gateway` for a network with
+  no gateway — five of gloval's networks are gatewayless, giving ten such values
+  in one response — and telegraf >= 1.39 parses that field through
+  `netip.ParseAddr`, so one bad value discards the entire list. Measured on
+  gloval's socket: 1.38.4 collects all 61 series; 1.39.0, 1.39.3, 1.40.0,
+  1.40.1, 1.40.2 and 1.40.3 collect none. It is not about `--network host`,
+  which was the first theory and is wrong. RT#1567.
+
+  Container metrics had been dead since 2026-11-06, which is why trentina's
+  six-hour climb to its memory cap was invisible.
+
 ### Changed
+
+- `Metrics freshness` now covers the container pipeline as well as the host
+  pipeline, and reports the worst age of the two. It asked only for
+  `system/load1`, which inputs.system keeps writing regardless, so it stayed OK
+  for two days while every `docker_container_*` series was missing and the
+  container dashboards were blank. `influxdb-freshness` takes an optional list
+  of `<measurement>:<field>` series and defaults to `system:load1` plus
+  `docker_container_mem:usage`.
 
 - Grafana's container cap is 1g with `GOMEMLIMIT=600MiB`, was 512m with
   `GOMEMLIMIT=400MiB`. The old pair put the steady state at 443 MB of 512 MB

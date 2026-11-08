@@ -7,7 +7,39 @@ FROM registry.access.redhat.com/ubi10/ubi-minimal
 # Minor-version globs. The weekly rebuild picks up patch releases; a minor or
 # major bump is a deliberate edit here, because provisioned dashboards, alert
 # rules and the Flux rollup task are consumers of these interfaces.
-ARG TELEGRAF_VERSION=1.40.*
+#
+# Telegraf is the exception and is pinned EXACTLY, not globbed. telegraf >= 1.39
+# cannot list containers at all on gloval:
+#
+#     E! [inputs.docker] Error in plugin: listing containers failed:
+#     ParseAddr("<nil>"): unable to parse IP
+#
+# Root cause: podman 5.8.2's Docker-compat /containers/json emits the literal
+# four-character string "<nil>" as NetworkSettings.Networks.<net>.Gateway for
+# any network that has no gateway -- Go's net.IP(nil).String(). gloval has five
+# such networks (crunchtools-rt, crunchtools-wiki, crunchtools-kagemusha,
+# crunchtools-nagios, crunchtools-josui-sites; each internal=true with no
+# gateway), which puts ten "<nil>" values in a single response. telegraf >= 1.39
+# parses Gateway strictly through netip.ParseAddr and fails the WHOLE list call,
+# so NO container's metrics are collected while the collector still reports
+# healthy. 1.38.4 does not parse that field and collects all 61 series.
+# Measured on gloval: 1.38.4 good; 1.39.0, 1.39.3, 1.40.0, 1.40.1, 1.40.2 and
+# 1.40.3 all dead. RT#1567.
+#
+# It is NOT about --network host, which was the first theory and is wrong: a
+# host-network container's blank IPAddress is handled fine by 1.40.3.
+#
+# This is also why CI cannot catch it. A GitHub runner has no gatewayless
+# network, so every telegraf version passes there. The version assertion in
+# tests/test-image.sh guards the pin; nothing in CI guards the bug.
+#
+# To lift the pin: build with a glob on a branch, then run that image's
+# `telegraf --test` with inputs.docker against gloval's real socket. Green there
+# is the only evidence that counts. The durable alternative is to give those
+# five networks a gateway, which removes the bad value at the source and frees
+# the telegraf version -- at the cost of recreating the networks and restarting
+# every container attached to them.
+ARG TELEGRAF_VERSION=1.38.4
 ARG INFLUXDB_VERSION=2.9.*
 ARG INFLUX_CLI_VERSION=2.8.*
 ARG GRAFANA_VERSION=13.2.*

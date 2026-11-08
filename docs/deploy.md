@@ -40,6 +40,20 @@ commit exactly the files you changed.
 The `tig` units carry `io.containers.autoupdate=registry` and follow `latest`.
 `mcp-grafana` is pinned to a version tag in its unit; bump it deliberately.
 
+Telegraf is pinned to an exact version in the `Containerfile`, not a minor glob
+like InfluxDB and Grafana. Telegraf >= 1.39 fails its entire container list when
+podman 5.8.2 reports a gatewayless network's `Gateway` as the literal `<nil>`,
+which kills every `docker_container_*` series at once (RT#1567). Do not widen
+it to make a build pass; the comment beside the pin has the procedure for
+lifting it, and the only evidence that counts is a `telegraf --test` run against
+gloval's own socket. CI cannot detect this — a runner has no gatewayless
+network, so every telegraf version looks fine there.
+
+`Metrics freshness` covers both the host series and the container series and
+reports the worst age of the two. That is deliberate: the check used to ask only
+for `system/load1`, so it stayed green through the two days every container
+metric was missing.
+
 ## Memory
 
 | Container | Cap |
