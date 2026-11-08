@@ -1,37 +1,75 @@
 #!/bin/bash
-# Print the age, in seconds, of the newest Telegraf point in InfluxDB.
+# Print the age, in seconds, of the OLDEST of the series this deployment must
+# always be receiving.
 #
-# Usage: influxdb-freshness
+# Usage: influxdb-freshness [<measurement>:<field> ...]
 #
 # Runs inside the influxd container (it reads the admin token from that
 # container's own environment), so a monitoring check can call it over the
-# Podman exec socket without holding any credential itself. Prints -1 if no
-# point has arrived in the last 24 hours.
+# Podman exec socket without holding any credential itself. Prints -1 if any
+# required series has had no point in the last 24 hours.
+#
+# Why this checks several series and reports the worst of them: it used to ask
+# only for system/load1, which comes from inputs.system and is written by the
+# host pipeline. In RT#1567 every docker_container_* series was dead for two
+# days -- telegraf could not list containers at all -- while system/load1 kept
+# arriving on schedule. So this check stayed green, the Grafana container
+# dashboards were blank, and the trentina memory climb that followed went unseen
+# for six hours because the graph that would have shown it had no data. One
+# collector writes both; proving one pipeline works proves nothing about the
+# other.
 
 set -euo pipefail
 
-# --raw returns annotated CSV: header rows starting with '#', a column-name
-# row, then data rows whose last column is the RFC 3339 timestamp kept by the
-# query. Only a data row ends in a timestamp.
-#
+# Series that must always be arriving, as "<measurement>:<field>". Add an entry
+# when a new input becomes something we would want to be paged about losing;
+# keep the list short, because every entry is one Flux query per check.
+REQUIRED_SERIES=("system:load1" "docker_container_mem:usage")
+if [ "$#" -gt 0 ]; then
+    REQUIRED_SERIES=("$@")
+fi
+
 # Host and token go through the environment, not flags, to stay out of the
 # process list.
 export INFLUX_HOST="http://127.0.0.1:8086"
 export INFLUX_TOKEN="${INFLUXDB_INIT_ADMIN_TOKEN:?}"
 
-newest="$(influx query --raw \
-    --org "${INFLUXDB_INIT_ORG:?}" \
-    "from(bucket: \"${INFLUXDB_INIT_BUCKET:-telegraf}\")
-       |> range(start: -24h)
-       |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"load1\")
-       |> group()
-       |> last()
-       |> keep(columns: [\"_time\"])" \
-    | tr -d '\r' | awk -F, '$NF ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ {print $NF}' | tail -1)"
+# --raw returns annotated CSV: header rows starting with '#', a column-name
+# row, then data rows whose last column is the RFC 3339 timestamp kept by the
+# query. Only a data row ends in a timestamp.
+newest_time() { # <measurement> <field> -> RFC 3339 timestamp, or empty
+    influx query --raw \
+        --org "${INFLUXDB_INIT_ORG:?}" \
+        "from(bucket: \"${INFLUXDB_INIT_BUCKET:-telegraf}\")
+           |> range(start: -24h)
+           |> filter(fn: (r) => r._measurement == \"$1\" and r._field == \"$2\")
+           |> group()
+           |> last()
+           |> keep(columns: [\"_time\"])" \
+        | tr -d '\r' \
+        | awk -F, '$NF ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ {print $NF}' \
+        | tail -1
+}
 
-if [ -z "$newest" ]; then
-    echo -1
-    exit 0
-fi
+now="$(date +%s)"
+worst=0
 
-echo $(( $(date +%s) - $(date -d "$newest" +%s) ))
+for series in "${REQUIRED_SERIES[@]}"; do
+    measurement="${series%%:*}"
+    field="${series#*:}"
+
+    newest="$(newest_time "$measurement" "$field")"
+
+    # A required series with nothing in 24h is the "no metrics" case, whichever
+    # series it is. Reported the same way the single-series version did, so the
+    # NRPE plugin's contract is unchanged: a bare integer, -1 meaning no data.
+    if [ -z "$newest" ]; then
+        echo -1
+        exit 0
+    fi
+
+    age=$(( now - $(date -d "$newest" +%s) ))
+    [ "$age" -gt "$worst" ] && worst="$age"
+done
+
+echo "$worst"

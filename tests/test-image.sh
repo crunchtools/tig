@@ -65,6 +65,15 @@ trap cleanup EXIT
 echo "=== Static tests ==="
 
 check "telegraf runs"            in_image "telegraf --version"
+# RT#1567: telegraf is pinned to an exact version in the Containerfile rather
+# than a minor glob, because >= 1.39 fails the entire container list when podman
+# 5.8.2 reports a gatewayless network's Gateway as the literal string "<nil>".
+# This asserts the PIN, and deliberately claims nothing more: a CI runner has no
+# gatewayless network, so a gather test would pass here on a telegraf that
+# collects nothing on gloval. Lifting the pin must be verified against gloval's
+# real socket -- see the Containerfile comment for the procedure.
+check "telegraf is the pinned 1.38.4" \
+    in_image "telegraf --version | grep -q 'Telegraf 1\.38\.4'"
 check "influxd runs"             in_image "influxd version"
 check "influx CLI runs"          in_image "influx version"
 check "grafana runs"             in_image "grafana --version"
@@ -82,6 +91,55 @@ check "grafana uid is 1502"      in_image "test \"\$(id -u grafana)\" = 1502"
 check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$? -eq 64"
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
+
+# RT#1567: the exec commands in the shipped config are flat strings, because
+# telegraf 1.38.4 rejects the nested ["prog", "arg"] form and fails the whole
+# config file on it. That leaves telegraf responsible for splitting "script arg"
+# into argv. If it ever stopped doing that, ctr_db_status.py would not run and
+# the database counters would disappear with nothing wrong in the data -- the
+# same silent shape as the bug this release fixes.
+#
+# So assert the argument actually arrives, rather than that the config parses:
+# point the script at a config naming one container that does not exist, and
+# require that name back in the output. If the argument were lost the script
+# would read its default config instead and never mention it. A command that
+# telegraf cannot split fails with "fork/exec ...: no such file or directory"
+# and emits nothing at all.
+exec_command_string_reaches_argv() {
+    local dir out
+    dir="$(mktemp -d)"
+    chmod 755 "$dir"
+    printf 'probe-not-a-container mariadb\n' > "$dir/db-probe.conf"
+    cat > "$dir/probe.conf" <<'PROBE'
+[agent]
+  interval = "10s"
+  omit_hostname = true
+[[inputs.exec]]
+  commands = ["/usr/local/libexec/telegraf/ctr_db_status.py /etc/telegraf/db-probe.conf"]
+  timeout = "20s"
+  data_format = "influx"
+PROBE
+    chmod 644 "$dir/db-probe.conf" "$dir/probe.conf"
+    # ,Z relabels for SELinux: these fixtures are created outside the repo, so
+    # without it the container cannot read them and the test fails for the wrong
+    # reason. Both podman and docker accept the flag; it is a no-op where
+    # SELinux is not enforcing.
+    out="$($RUNTIME run --rm \
+        -v "$dir/db-probe.conf:/etc/telegraf/db-probe.conf:ro,Z" \
+        -v "$dir/probe.conf:/etc/telegraf/probe.conf:ro,Z" \
+        --entrypoint telegraf "$IMAGE" --config /etc/telegraf/probe.conf --test 2>&1)"
+    rm -rf "$dir"
+    contains "db_collector,container=probe-not-a-container up=0i" <<<"$out" && return 0
+    # Report what telegraf actually said. Without this the assertion fails with
+    # no output and the next person has to re-derive the cause from nothing,
+    # which is how the first version of this test cost an hour: it passed
+    # standalone and failed in the suite, and the SELinux denial that explained
+    # it was sitting unread in this variable.
+    echo "telegraf output was:"
+    printf '%s\n' "$out"
+    return 1
+}
+check "exec command string is split into argv" exec_command_string_reaches_argv
 
 echo "=== Runtime tests ==="
 
@@ -151,15 +209,33 @@ read_token_cannot_write() {
     ! $RUNTIME exec tig-test-influxdb influx write --org crunchtools --bucket telegraf \
         --token "$READ_TOKEN" 'forged value=1' >/dev/null 2>&1
 }
+# RT#1567: influxdb-freshness now requires the CONTAINER pipeline as well as
+# system/load1. inputs.docker cannot gather in here (no Podman socket), so seed
+# one docker_container_mem point to stand for a healthy container pipeline.
+$RUNTIME exec tig-test-influxdb influx write --org crunchtools --bucket telegraf \
+    --token test-admin-token 'docker_container_mem,container_name=seed usage=1i' >/dev/null
+
 freshness_reports_recent_age() {
     local age
     age="$($RUNTIME exec tig-test-influxdb /usr/local/bin/influxdb-freshness)"
     echo "influxdb-freshness printed: '$age'"
     [ "$age" -ge 0 ] && [ "$age" -lt 300 ]
 }
+# The actual lesson of RT#1567, and the one check here that would have caught
+# it: a fresh host pipeline must NOT be enough to satisfy this. system/load1 is
+# present and recent at this point, so asking additionally for a container
+# series that was never written must still report the no-data case, which the
+# NRPE plugin maps to CRITICAL. Without this, every container metric can be dead
+# for days behind a green check.
+freshness_requires_the_container_pipeline() {
+    [ "$($RUNTIME exec tig-test-influxdb /usr/local/bin/influxdb-freshness \
+        system:load1 docker_container_mem:nosuchfield)" = "-1" ]
+}
 check "write token cannot read"                write_token_cannot_read
 check "read token cannot write"                read_token_cannot_write
 check "freshness helper reports a recent age"  freshness_reports_recent_age
+check "freshness requires the container pipeline, not just the host" \
+    freshness_requires_the_container_pipeline
 # Nothing has been rolled up yet, so the rollup bucket is the no-data case.
 freshness_reports_no_data() {
     [ "$($RUNTIME exec -e INFLUXDB_INIT_BUCKET=telegraf_rollup tig-test-influxdb /usr/local/bin/influxdb-freshness)" = "-1" ]
