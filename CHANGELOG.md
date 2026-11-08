@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-08
+
 ### Changed
 
 - **`TELEGRAF_VERSION` is a minor glob again, not an exact pin (RT #1598).**
