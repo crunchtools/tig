@@ -13,7 +13,7 @@
     "from": "now-24h",
     "to": "now"
   },
-  "description": "Gateway traffic from Trentina's OTLP export and OpenRouter spend from its analytics API (RT #1544).",
+  "description": "Gateway traffic from Trentina's OTLP export (RT #1544).",
   "panels": [
     {
       "id": 1,
@@ -26,7 +26,7 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 4,
+        "w": 6,
         "h": 4
       },
       "fieldConfig": {
@@ -67,9 +67,9 @@
         "uid": "influxdb"
       },
       "gridPos": {
-        "x": 4,
+        "x": 6,
         "y": 0,
-        "w": 4,
+        "w": 6,
         "h": 4
       },
       "fieldConfig": {
@@ -111,9 +111,9 @@
         "uid": "influxdb"
       },
       "gridPos": {
-        "x": 8,
+        "x": 12,
         "y": 0,
-        "w": 4,
+        "w": 6,
         "h": 4
       },
       "fieldConfig": {
@@ -155,9 +155,9 @@
         "uid": "influxdb"
       },
       "gridPos": {
-        "x": 12,
+        "x": 18,
         "y": 0,
-        "w": 4,
+        "w": 6,
         "h": 4
       },
       "fieldConfig": {
@@ -191,113 +191,6 @@
     },
     {
       "id": 5,
-      "type": "stat",
-      "title": "OpenRouter spend today (UTC)",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD"
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_key\" and r._field == \"usage_daily\")\n  |> last()\n  |> group()\n  |> sum()\n"
-        }
-      ],
-      "description": "Sum of every key's usage_daily from OpenRouter /keys, polled every 15 minutes."
-    },
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "OpenRouter balance",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 20,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "green",
-                "value": 20
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_credits\" and r._field == \"balance\")\n  |> last()\n"
-        }
-      ]
-    },
-    {
-      "id": 7,
       "type": "timeseries",
       "title": "Calls by outcome",
       "datasource": {
@@ -346,7 +239,7 @@
       ]
     },
     {
-      "id": 8,
+      "id": 6,
       "type": "timeseries",
       "title": "Calls by profile",
       "datasource": {
@@ -395,7 +288,7 @@
       ]
     },
     {
-      "id": 9,
+      "id": 7,
       "type": "timeseries",
       "title": "Detections by layer",
       "datasource": {
@@ -445,7 +338,7 @@
       "description": "Calls credited to each defense layer. A jump in L2 with no matching L3 flags is where to look for false positives."
     },
     {
-      "id": 10,
+      "id": 8,
       "type": "table",
       "title": "Top flagged tools",
       "datasource": {
@@ -477,7 +370,7 @@
       ]
     },
     {
-      "id": 11,
+      "id": 9,
       "type": "timeseries",
       "title": "Duration p50 / p95 by kind",
       "datasource": {
@@ -527,7 +420,7 @@
       ]
     },
     {
-      "id": 12,
+      "id": 10,
       "type": "timeseries",
       "title": "Egress tunnels by profile",
       "datasource": {
@@ -577,186 +470,7 @@
       "description": "CONNECT tunnels through Trentina's client egress, per agent."
     },
     {
-      "id": 13,
-      "type": "barchart",
-      "title": "OpenRouter spend per day by model",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 28,
-        "w": 12,
-        "h": 9
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 80,
-            "lineWidth": 1
-          },
-          "unit": "currencyUSD"
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "vertical",
-        "stacking": "normal",
-        "showValue": "never",
-        "xTickLabelRotation": -45,
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "sum"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "import \"date\"\nfrom(bucket: \"telegraf\")\n  |> range(start: date.truncate(t: v.timeRangeStart, unit: 1d), stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_usage\" and r._field == \"cost\")\n  |> group(columns: [\"model\"])\n  |> keep(columns: [\"_time\", \"_value\", \"model\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"model\"], valueColumn: \"_value\")\n  |> group()\n"
-        }
-      ],
-      "description": "From OpenRouter's analytics API, by UTC day. The last three days are re-read every 15 minutes as they settle."
-    },
-    {
-      "id": 14,
-      "type": "barchart",
-      "title": "OpenRouter spend per day by agent key",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 28,
-        "w": 12,
-        "h": 9
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 80,
-            "lineWidth": 1
-          },
-          "unit": "currencyUSD"
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "vertical",
-        "stacking": "normal",
-        "showValue": "never",
-        "xTickLabelRotation": -45,
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "sum"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "import \"date\"\nfrom(bucket: \"telegraf\")\n  |> range(start: date.truncate(t: v.timeRangeStart, unit: 1d), stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_usage\" and r._field == \"cost\")\n  |> group(columns: [\"key\"])\n  |> keep(columns: [\"_time\", \"_value\", \"key\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"key\"], valueColumn: \"_value\")\n  |> group()\n"
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "type": "table",
-      "title": "OpenRouter tokens by model",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 37,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "import \"date\"\nfrom(bucket: \"telegraf\")\n  |> range(start: date.truncate(t: v.timeRangeStart, unit: 1d), stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_usage\")\n  |> filter(fn: (r) => r._field == \"requests\" or r._field == \"prompt_tokens\" or r._field == \"completion_tokens\" or r._field == \"reasoning_tokens\" or r._field == \"cost\")\n  |> group(columns: [\"model\", \"_field\"])\n  |> sum()\n  |> pivot(rowKey: [\"model\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> sort(columns: [\"cost\"], desc: true)\n"
-        }
-      ]
-    },
-    {
-      "id": 16,
-      "type": "bargauge",
-      "title": "Spend today by agent key (UTC)",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 37,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD"
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_key\" and r._field == \"usage_daily\")\n  |> last()\n  |> group(columns: [\"key\"])\n  |> keep(columns: [\"_value\", \"key\"])\n"
-        }
-      ]
-    },
-    {
-      "id": 17,
+      "id": 11,
       "type": "timeseries",
       "title": "Model calls refused or failed by profile",
       "datasource": {
@@ -765,8 +479,8 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 45,
-        "w": 12,
+        "y": 28,
+        "w": 24,
         "h": 8
       },
       "fieldConfig": {
@@ -804,58 +518,6 @@
         }
       ],
       "description": "Calls through the LLM proxy that did not come back ok. An OpenRouter spend cap shows here as backend_error."
-    },
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "OpenRouter collector up",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 45,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 1,
-            "showPoints": "never"
-          },
-          "unit": "short",
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "from(bucket: \"telegraf\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"openrouter_collector\" and r._field == \"up\")\n  |> keep(columns: [\"_time\", \"_value\"])\n"
-        }
-      ]
     }
   ]
 }
