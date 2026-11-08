@@ -23,6 +23,14 @@ All notable changes to this project are documented here. The format follows
   Container metrics had been dead since 2026-11-06, which is why trentina's
   six-hour climb to its memory cap was invisible.
 
+- The two `inputs.exec` stanzas in `deploy/telegraf/telegraf.conf` now give
+  `commands` as single strings rather than nested `["prog", "arg"]` arrays. The
+  nested form is only accepted by telegraf >= 1.39; on 1.38.4 it fails the whole
+  config file with `cannot unmarshal TOML array into string`, which takes every
+  input down rather than just those two. Verified to load identically on 1.38.4
+  and 1.40.3, so it stays correct when the pin is lifted. Operators who copied
+  the old file need this edit too, or the collector will not start.
+
 ### Changed
 
 - `Metrics freshness` now covers the container pipeline as well as the host
