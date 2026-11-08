@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The two Telegrafs are named for what they do.** `telegraf.crunchtools.com`
+  is now `telegraf-host.crunchtools.com` (gathers metrics from the host) and
+  `telegraf-otlp.crunchtools.com` is now `telegraf-receiver.crunchtools.com`
+  (receives what services send it; network alias `telegraf-receiver`, was
+  `otlp`). Units, `/srv` directories, env files, `deploy/` directories, Nagios
+  hosts (`ctr-telegraf-host`, `ctr-telegraf-receiver`) and NRPE commands
+  follow. Container metrics are tagged by container name, so the Containers
+  dashboard shows the new name from the switch on. Operators: move the `/srv`
+  directories and rename the env files; point `TRENTINA_OTLP_ENDPOINT` at
+  `http://telegraf-receiver:4318`.
+
+### Changed
+
 - **`TELEGRAF_VERSION` is a minor glob again, not an exact pin (RT #1598).**
   The pin existed because telegraf >= 1.39 parses a container's `Gateway`
   through `netip.ParseAddr` and discards the entire container list on one bad

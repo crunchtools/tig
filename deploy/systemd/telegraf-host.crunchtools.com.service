@@ -1,5 +1,5 @@
 [Unit]
-Description=Podman container - telegraf.crunchtools.com (Telegraf host and container collector)
+Description=Podman container - telegraf-host.crunchtools.com (Telegraf host and container collector)
 Documentation=https://github.com/crunchtools/tig
 Wants=network-online.target influxdb.crunchtools.com.service
 After=network-online.target influxdb.crunchtools.com.service podman.socket
@@ -26,14 +26,14 @@ Type=simple
 Restart=always
 RestartSec=10
 ExecStartPre=/usr/bin/sleep 1.5
-ExecStartPre=-/usr/bin/podman rm -f telegraf.crunchtools.com
+ExecStartPre=-/usr/bin/podman rm -f telegraf-host.crunchtools.com
 ExecStart=/usr/bin/podman run \
     --label io.containers.autoupdate=registry \
-    --label PODMAN_SYSTEMD_UNIT=telegraf.crunchtools.com.service \
+    --label PODMAN_SYSTEMD_UNIT=telegraf-host.crunchtools.com.service \
     --memory=384m \
     --memory-swap=384m \
     --rm \
-    --name telegraf.crunchtools.com \
+    --name telegraf-host.crunchtools.com \
     --network=host \
     --pid=host \
     --read-only \
@@ -42,13 +42,13 @@ ExecStart=/usr/bin/podman run \
     --cap-add SYS_PTRACE \
     --cap-add DAC_READ_SEARCH \
     --security-opt label=disable \
-    --env-file /srv/telegraf.crunchtools.com/config/telegraf.env \
-    -v /srv/telegraf.crunchtools.com/config/etc:/etc/telegraf:ro \
+    --env-file /srv/telegraf-host.crunchtools.com/config/telegraf-host.env \
+    -v /srv/telegraf-host.crunchtools.com/config/etc:/etc/telegraf:ro \
     -v /:/hostfs:ro \
     -v /run/podman/podman.sock:/run/podman/podman.sock \
     quay.io/crunchtools/tig:latest telegraf
-ExecStop=/usr/bin/podman stop -t 10 telegraf.crunchtools.com
-ExecStopPost=/usr/bin/podman rm -f telegraf.crunchtools.com
+ExecStop=/usr/bin/podman stop -t 10 telegraf-host.crunchtools.com
+ExecStopPost=/usr/bin/podman rm -f telegraf-host.crunchtools.com
 
 [Install]
 WantedBy=multi-user.target

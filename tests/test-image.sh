@@ -170,7 +170,7 @@ full_config_loads_cleanly() {
     output="$($RUNTIME run --rm \
         -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
         -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN=unused \
-        -v "$REPO/deploy/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+        -v "$REPO/deploy/telegraf-host/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
         "$IMAGE" telegraf --test 2>&1 || true)"
     if grep -E 'loading config file .* failed|DeprecationWarning' <<<"$output"; then
         return 1
@@ -184,7 +184,7 @@ check "telegraf writes with the shipped config" \
     $RUNTIME run --rm --network "$NET" \
         -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
         -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN="$WRITE_TOKEN" \
-        -v "$REPO/deploy/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+        -v "$REPO/deploy/telegraf-host/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
         "$IMAGE" telegraf --input-filter cpu:mem:swap:system:exec --once
 
 check "read token can query the point back" \
@@ -251,22 +251,22 @@ check "fd walker data reached influxdb" \
     sh -c "$RUNTIME exec tig-test-influxdb influx query --org crunchtools --token '$READ_TOKEN' \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"fd_types_total\") |> limit(n:1)' | grep -q fd_types_total"
 
-echo "=== OTLP receiver (shipped telegraf-otlp config, a payload from Trentina's exporter) ==="
+echo "=== OTLP receiver (shipped telegraf-receiver config, a payload from Trentina's exporter) ==="
 
 # tests/fixtures/otlp-trentina.json is what trentina's telemetry.otlp_payload
 # produces for five calls; the receiver must turn each span into one point.
-$RUNTIME run -d --name tig-test-otlp --network "$NET" --network-alias otlp \
+$RUNTIME run -d --name tig-test-otlp --network "$NET" --network-alias telegraf-receiver \
     -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
     -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN="$WRITE_TOKEN" \
     -e OTLP_USERNAME=trentina -e OTLP_PASSWORD=otlp-test-password \
-    -v "$REPO/deploy/telegraf-otlp/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+    -v "$REPO/deploy/telegraf-receiver/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
     "$IMAGE" telegraf >/dev/null
 
 otlp_post() {
     $RUNTIME run --rm --network "$NET" -v "$REPO/tests/fixtures:/fixtures:ro" --entrypoint curl "$IMAGE" \
         -s -o /dev/null -w '%{http_code}' -m 10 "$@" \
         -H 'Content-Type: application/json' --data-binary @/fixtures/otlp-trentina.json \
-        http://otlp:4318/v1/traces
+        http://telegraf-receiver:4318/v1/traces
 }
 otlp_up() { [ "$(otlp_post -u trentina:otlp-test-password)" = 204 ]; }
 otlp_refuses_without_auth() { [ "$(otlp_post)" = 401 ]; }
