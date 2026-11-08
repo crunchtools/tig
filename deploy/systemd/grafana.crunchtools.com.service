@@ -23,8 +23,8 @@ ExecStart=/usr/bin/podman run \
     --health-on-failure kill \
     --label io.containers.autoupdate=registry \
     --label PODMAN_SYSTEMD_UNIT=grafana.crunchtools.com.service \
-    --memory=512m \
-    --memory-swap=512m \
+    --memory=1g \
+    --memory-swap=1g \
     --rm \
     --name grafana.crunchtools.com \
     --hostname grafana.crunchtools.com \
@@ -33,7 +33,7 @@ ExecStart=/usr/bin/podman run \
     --network-alias grafana \
     -p 127.0.0.1:8098:3000 \
     --env-file /srv/grafana.crunchtools.com/config/grafana.env \
-    -e GOMEMLIMIT=400MiB \
+    -e GOMEMLIMIT=600MiB \
     -v /srv/grafana.crunchtools.com/config/etc:/etc/grafana:ro,Z \
     -v /srv/grafana.crunchtools.com/data:/var/lib/grafana:Z \
     quay.io/crunchtools/tig:latest grafana

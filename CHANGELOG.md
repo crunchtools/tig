@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Grafana's container cap is 1g with `GOMEMLIMIT=600MiB`, was 512m with
+  `GOMEMLIMIT=400MiB`. The old pair put the steady state at 443 MB of 512 MB
+  and left `Container memory` on `ctr-grafana` permanently at WARNING with
+  nothing wrong. `docs/deploy.md` now sizes `GOMEMLIMIT` to the working set
+  and the cap to the headroom above it, rather than `GOMEMLIMIT` to 80% of
+  the cap.
+
 - The telegraf probe tests now run in the `sdlc ci` gate as a
   `pytest-in-image` check, instead of only during the image build.
 
