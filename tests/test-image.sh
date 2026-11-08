@@ -57,7 +57,7 @@ wait_for() {
 }
 
 cleanup() {
-    $RUNTIME rm -f tig-test-influxdb tig-test-grafana tig-test-mcp tig-test-sink >/dev/null 2>&1 || true
+    $RUNTIME rm -f tig-test-influxdb tig-test-grafana tig-test-mcp tig-test-sink tig-test-otlp >/dev/null 2>&1 || true
     $RUNTIME network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -82,6 +82,9 @@ check "dispatcher executable"    in_image "test -x /usr/local/bin/tig"
 check "bootstrap executable"     in_image "test -x /usr/local/bin/influxdb-bootstrap"
 check "fd walker executable"     in_image "test -x /usr/local/libexec/telegraf/fd_types.py"
 check "db collector executable"  in_image "test -x /usr/local/libexec/telegraf/ctr_db_status.py"
+check "openrouter collector executable" in_image "test -x /usr/local/libexec/telegraf/openrouter_usage.py"
+check "openrouter collector without a key reports down" \
+    sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/openrouter_usage.py $IMAGE 2>/dev/null | grep -qx 'openrouter_collector up=0i'"
 check "rollup task shipped"      in_image "test -r /usr/local/share/tig/rollup.flux"
 check "firing helper executable" in_image "test -x /usr/local/bin/grafana-firing"
 check "firing helper fails without grafana" \
@@ -261,6 +264,96 @@ check "fd walker data reached influxdb" \
     sh -c "$RUNTIME exec tig-test-influxdb influx query --org crunchtools --token '$READ_TOKEN' \
         'from(bucket:\"telegraf\") |> range(start:-5m) |> filter(fn:(r)=>r._measurement==\"fd_types_total\") |> limit(n:1)' | grep -q fd_types_total"
 
+echo "=== OTLP receiver (shipped telegraf-otlp config, a payload from Trentina's exporter) ==="
+
+# tests/fixtures/otlp-trentina.json is what trentina's telemetry.otlp_payload
+# produces for five calls; the receiver must turn each span into one point.
+$RUNTIME run -d --name tig-test-otlp --network "$NET" --network-alias otlp \
+    -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
+    -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN="$WRITE_TOKEN" \
+    -e OTLP_USERNAME=trentina -e OTLP_PASSWORD=otlp-test-password \
+    -v "$REPO/deploy/telegraf-otlp/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+    "$IMAGE" telegraf >/dev/null
+
+otlp_post() {
+    $RUNTIME run --rm --network "$NET" -v "$REPO/tests/fixtures:/fixtures:ro" --entrypoint curl "$IMAGE" \
+        -s -o /dev/null -w '%{http_code}' -m 10 "$@" \
+        -H 'Content-Type: application/json' --data-binary @/fixtures/otlp-trentina.json \
+        http://otlp:4318/v1/traces
+}
+otlp_up() { [ "$(otlp_post -u trentina:otlp-test-password)" = 204 ]; }
+otlp_refuses_without_auth() { [ "$(otlp_post)" = 401 ]; }
+otlp_refuses_wrong_auth() { [ "$(otlp_post -u trentina:wrong)" = 401 ]; }
+otlp_points_count() {
+    $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$READ_TOKEN" --raw \
+        'from(bucket:"telegraf") |> range(start: 2026-11-01T00:00:00Z) |> filter(fn:(r)=>r._measurement=="trentina_calls" and r._field=="duration_ms") |> group() |> count()' \
+        | grep -oE ',[0-9]+$' | tr -d ,
+}
+otlp_points_arrived() { [ "$(otlp_points_count)" = 5 ]; }
+otlp_blocked_call_tagged() {
+    $RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$READ_TOKEN" --raw \
+        'from(bucket:"telegraf") |> range(start: 2026-11-01T00:00:00Z) |> filter(fn:(r)=>r._measurement=="trentina_calls" and r.outcome=="blocked_defense" and r.layer=="L2" and r.risk=="high")' \
+        | contains duration_ms
+}
+
+check "receiver accepts a span batch with basic auth"  wait_for otlp-receiver otlp_up
+check "receiver refuses a batch without auth"          otlp_refuses_without_auth
+check "receiver refuses a batch with the wrong password" otlp_refuses_wrong_auth
+check "five spans became five points"                 wait_for "otlp points" otlp_points_arrived
+check "a blocked call keeps its layer and risk tags"   otlp_blocked_call_tagged
+
+echo "=== Trentina dashboard (every shipped query runs against test data) ==="
+
+# OpenRouter points as openrouter_usage.py writes them (its unit tests pin the
+# shape), so the spend panels have rows to read.
+write_openrouter_points() {
+    local midnight now
+    midnight=$(( $(date -u +%s) / 86400 * 86400 ))
+    now=$(date -u +%s)
+    printf '%s\n' \
+        "openrouter_usage,model=google/gemini-2.5-flash-lite,key=josui cost=0.04,requests=310i,prompt_tokens=120000i,completion_tokens=4100i,reasoning_tokens=0i $midnight" \
+        "openrouter_usage,model=anthropic/claude-sonnet-4,key=kagetora cost=1.5,requests=2i $midnight" \
+        "openrouter_key,key=josui usage_daily=0.05,usage_monthly=3.1 $now" \
+        "openrouter_credits total_credits=50,total_usage=12.25,balance=37.75 $now" \
+        "openrouter_collector up=1i $now" \
+        | $RUNTIME exec -i tig-test-influxdb influx write --org crunchtools --bucket telegraf \
+            --token test-admin-token --precision s
+}
+# Grafana fills v.timeRangeStart, v.timeRangeStop and v.windowPeriod; outside
+# it, a query defines them itself. Each must run and return at least one row.
+dashboard_queries_run() {
+    python3 - "$REPO/deploy/grafana/dashboards/trentina.json" <<'PY' > "$REPO/.trentina-queries.txt"
+import json, sys
+for panel in json.load(open(sys.argv[1]))["panels"]:
+    for target in panel["targets"]:
+        print(json.dumps({"title": panel["title"], "query": target["query"]}))
+PY
+    local failed=0 title query flux out
+    while IFS= read -r entry; do
+        title="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["title"])' "$entry")"
+        query="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["query"])' "$entry")"
+        flux="$(python3 -c '
+import sys
+q = sys.argv[1]
+head = "v = {timeRangeStart: 2026-11-01T00:00:00Z, timeRangeStop: now(), windowPeriod: 1h}\n"
+lines = q.split("\n")
+imports = [l for l in lines if l.startswith("import ")]
+rest = [l for l in lines if not l.startswith("import ")]
+print("\n".join(imports + [head] + rest))
+' "$query")"
+        # --raw is annotated CSV: a header row starting "," and then the rows.
+        if ! out="$($RUNTIME exec tig-test-influxdb influx query --org crunchtools --token "$READ_TOKEN" --raw "$flux" 2>&1)" \
+            || [ "$(grep -v '^#' <<<"$out" | grep -c '^,')" -lt 2 ]; then
+            echo "panel '$title' failed: $(head -c 300 <<<"$out")"
+            failed=1
+        fi
+    done < "$REPO/.trentina-queries.txt"
+    rm -f "$REPO/.trentina-queries.txt"
+    return $failed
+}
+check "openrouter points written"                  write_openrouter_points
+check "every Trentina dashboard query returns rows" dashboard_queries_run
+
 $RUNTIME run -d --name tig-test-grafana --network "$NET" \
     --user 1502:1502 --tmpfs /var/lib/grafana:exec,uid=1502,gid=1502 \
     -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=test-password-123 \
@@ -278,7 +371,7 @@ check "grafana becomes healthy with shipped provisioning" \
 
 datasource_provisioned() { grafana_api /api/datasources/uid/influxdb | contains '"type":"influxdb"'; }
 datasource_healthy()     { grafana_api /api/datasources/uid/influxdb/health | contains '"status":"OK"'; }
-dashboards_provisioned() { [ "$(grafana_api '/api/search?tag=tig' | grep -o '"uid":"tig-' | wc -l)" -eq 4 ]; }
+dashboards_provisioned() { [ "$(grafana_api '/api/search?tag=tig' | grep -o '"uid":"tig-' | wc -l)" -eq 5 ]; }
 alert_rules_provisioned() { [ "$(grafana_api /api/v1/provisioning/alert-rules | grep -o '"uid":"' | wc -l)" -ge 4 ]; }
 
 check "datasource provisioned"       datasource_provisioned
@@ -291,7 +384,7 @@ one_plugin_backend() { [ "$(plugin_backends | grep -c gpx_)" -eq 1 ]; }
 check "influxdb plugin backend starts"        wait_for "influxdb plugin" influxdb_plugin_running
 check "datasource reaches influxdb"           wait_for "datasource health" datasource_healthy
 check "no other plugin backend is running"    one_plugin_backend
-check "four dashboards provisioned"  dashboards_provisioned
+check "five dashboards provisioned"  dashboards_provisioned
 check "four alert rules provisioned" alert_rules_provisioned
 
 # Trend alerts must not page: every alert lands on a route muted around the

@@ -49,3 +49,40 @@ multiplexed exec stream frame by frame. Containers are listed in
 ```
 <container-name> <mariadb|postgres> [db-user]
 ```
+
+## OpenRouter spend
+
+`openrouter_usage.py` reads OpenRouter with a management key
+(`OPENROUTER_MANAGEMENT_KEY` in `telegraf.env`) every 15 minutes:
+
+- `openrouter_usage,model,key`: cost, requests and tokens per UTC day, from
+  `POST /api/v1/analytics/query`, the source behind OpenRouter's activity
+  page. The last three days are read on every run and stamped at UTC
+  midnight, so each day's figure is replaced as it settles instead of being
+  counted twice. Every agent has its own key, so `key` is the agent.
+- `openrouter_key,key`: the running `usage_daily`, `usage_weekly`,
+  `usage_monthly` and `limit_remaining` per key, from `/keys`.
+- `openrouter_credits`: `total_credits`, `total_usage` and `balance`.
+- `openrouter_collector up`: 0 when the key is missing or any read failed.
+  The failure kind goes to stderr; the key never does.
+
+A management key can create and delete keys. It lives only in `telegraf.env`
+(0600) and is sent only in the Authorization header.
+
+## Trentina call traces
+
+`telegraf-otlp.crunchtools.com` is a second Telegraf with one input: an
+OTLP/HTTP receiver (`http_listener_v2`, port 4318, `/v1/traces`, basic auth)
+for the spans Trentina exports (`TRENTINA_OTLP_ENDPOINT`). Telegraf's own
+OTLP input speaks gRPC only, so the spans come as OTLP/JSON and an xpath
+parser maps each one to a `trentina_calls` point:
+
+- tags: `profile`, `backend`, `tool`, `outcome`, `destination_kind`, `layer`,
+  `risk`, `l3_verdict`
+- fields: `duration_ms`, `bytes_arrived`, `bytes_delivered`, `success`,
+  `trace_id`
+
+It runs apart from the host collector because it answers requests from other
+containers: no host network, PID namespace, socket, mounts or capabilities.
+The points keep the span's nanosecond timestamp, so two calls with the same
+tags never overwrite each other. The Trentina dashboard reads both.

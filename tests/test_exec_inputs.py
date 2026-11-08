@@ -16,6 +16,7 @@ import struct
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ sys.path.insert(0, "/usr/local/libexec/telegraf")
 # and keeps reads and writes consistent.
 ctr_db_status: Any = importlib.import_module("ctr_db_status")
 fd_types: Any = importlib.import_module("fd_types")
+openrouter_usage: Any = importlib.import_module("openrouter_usage")
 
 
 def frame(stream_id: int, payload: bytes) -> bytes:
@@ -198,6 +200,143 @@ class ConfigReading(unittest.TestCase):
     def test_unreachable_socket_raises_oserror(self) -> None:
         with self.assertRaises(OSError):
             ctr_db_status.container_exec("/nonexistent/podman.sock", "x", ["true"])
+
+
+# Shapes from the OpenRouter API reference (analytics/query, keys, credits),
+# with counts as strings the way the analytics API can send them.
+ANALYTICS_REPLY = {
+    "data": {
+        "data": [
+            {
+                "date__day": "2026-11-07T00:00:00.000Z",
+                "model": "google/gemini-2.5-flash-lite",
+                "api_key_id": "josui",
+                "total_usage": 0.0421,
+                "request_count": "310",
+                "tokens_prompt": "120000",
+                "tokens_completion": 4100,
+                "reasoning_tokens": 0,
+            },
+            {
+                "date__day": "2026-11-08T00:00:00.000Z",
+                "model": "anthropic/claude sonnet,x=1",
+                "api_key_id": None,
+                "total_usage": "1.5",
+                "request_count": 2,
+            },
+            {"date__day": "not a date", "model": "m", "total_usage": 1},
+            "junk",
+        ],
+        "metadata": {"query_time_ms": 12, "row_count": 3, "truncated": False},
+    }
+}
+KEYS_REPLY = {
+    "data": [
+        {
+            "name": "josui",
+            "hash": "ab" * 32,
+            "usage": 3.5,
+            "usage_daily": 0.05,
+            "usage_weekly": 0.9,
+            "usage_monthly": 3.1,
+            "limit_remaining": None,
+        },
+        {"label": "sk-or-v1-abc...", "usage": 0},
+        {"name": "empty"},
+    ]
+}
+CREDITS_REPLY = {"data": {"total_credits": 50, "total_usage": 12.25}}
+
+
+class OpenRouterUsage(unittest.TestCase):
+    """Spend by model and key, as stable line protocol."""
+
+    def test_usage_rows_become_daily_points(self) -> None:
+        self.assertEqual(
+            openrouter_usage.usage_lines(ANALYTICS_REPLY),
+            [
+                "openrouter_usage,model=google/gemini-2.5-flash-lite,key=josui "
+                "cost=0.0421,requests=310i,prompt_tokens=120000i,completion_tokens=4100i,"
+                "reasoning_tokens=0i 1794009600000000000",
+                "openrouter_usage,model=anthropic/claude_sonnet_x_1,key=unknown "
+                "cost=1.5,requests=2i 1794096000000000000",
+            ],
+        )
+
+    def test_key_and_credit_points(self) -> None:
+        self.assertEqual(
+            openrouter_usage.key_lines(KEYS_REPLY),
+            [
+                "openrouter_key,key=josui usage=3.5,usage_daily=0.05,usage_weekly=0.9,usage_monthly=3.1",
+                "openrouter_key,key=sk-or-v1-abc... usage=0.0",
+            ],
+        )
+        self.assertEqual(
+            openrouter_usage.credit_lines(CREDITS_REPLY),
+            ["openrouter_credits total_credits=50.0,total_usage=12.25,balance=37.75"],
+        )
+
+    def test_a_bad_shape_is_a_read_error(self) -> None:
+        for reader in (
+            openrouter_usage.usage_lines,
+            openrouter_usage.key_lines,
+            openrouter_usage.credit_lines,
+        ):
+            with self.assertRaises(openrouter_usage.ReadError):
+                reader({"error": {"code": 403}})
+
+    def test_query_covers_whole_utc_days(self) -> None:
+        now = openrouter_usage.datetime(2026, 11, 8, 15, 4, 5, tzinfo=openrouter_usage.UTC)
+        body = openrouter_usage.query_body(now)
+        self.assertEqual(body["time_range"], {"start": "2026-11-06T00:00:00Z", "end": "2026-11-08T15:04:05Z"})
+        self.assertEqual(body["dimensions"], ["model", "api_key_id"])
+        self.assertEqual(body["granularity"], "day")
+
+    def _run(self, env: dict[str, str], replies: dict[str, Any]) -> tuple[str, str]:
+        def fake_call(path: str, key: str, body: object = None) -> object:
+            self.assertEqual(key, env.get("OPENROUTER_MANAGEMENT_KEY"))
+            reply = replies[path]
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            unittest.mock.patch.dict(openrouter_usage.os.environ, env, clear=True),
+            unittest.mock.patch.object(openrouter_usage, "call", fake_call),
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+        ):
+            self.assertEqual(openrouter_usage.main(), 0)
+        return out.getvalue(), err.getvalue()
+
+    def test_main_reports_up_and_never_prints_the_key(self) -> None:
+        secret = "sk-or-v1-management-SECRET"
+        out, err = self._run(
+            {"OPENROUTER_MANAGEMENT_KEY": secret},
+            {"/analytics/query": ANALYTICS_REPLY, "/keys": KEYS_REPLY, "/credits": CREDITS_REPLY},
+        )
+        self.assertTrue(out.endswith("openrouter_collector up=1i\n"), out)
+        self.assertEqual(out.count("openrouter_usage,"), 2)
+        self.assertNotIn(secret, out + err)
+
+    def test_one_failed_read_keeps_the_others(self) -> None:
+        out, err = self._run(
+            {"OPENROUTER_MANAGEMENT_KEY": "k"},
+            {
+                "/analytics/query": openrouter_usage.ReadError("http_403"),
+                "/keys": KEYS_REPLY,
+                "/credits": CREDITS_REPLY,
+            },
+        )
+        self.assertIn("openrouter_credits", out)
+        self.assertIn("openrouter_collector up=0i", out)
+        self.assertIn("analytics failed: http_403", err)
+
+    def test_no_key_is_down_not_a_crash(self) -> None:
+        out, err = self._run({}, {})
+        self.assertEqual(out, "openrouter_collector up=0i\n")
+        self.assertIn("OPENROUTER_MANAGEMENT_KEY is not set", err)
 
 
 if __name__ == "__main__":

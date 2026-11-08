@@ -1,0 +1,39 @@
+[Unit]
+Description=Podman container - telegraf-otlp.crunchtools.com (OTLP receiver for Trentina traces)
+Documentation=https://github.com/crunchtools/tig
+Wants=network-online.target influxdb.crunchtools.com.service
+After=network-online.target influxdb.crunchtools.com.service
+
+# Unlike telegraf.crunchtools.com, this one answers requests: it receives
+# Trentina's spans on the `crunchtools` bridge (alias `otlp`, port 4318) with
+# basic auth. So it gets none of the host collector's reach: no host network,
+# PID namespace, Podman socket or host filesystem, no capabilities, and no
+# published port. It holds a write-only InfluxDB token.
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=/usr/bin/sleep 1.5
+ExecStartPre=-/usr/bin/podman rm -f telegraf-otlp.crunchtools.com
+ExecStart=/usr/bin/podman run \
+    --label io.containers.autoupdate=registry \
+    --label PODMAN_SYSTEMD_UNIT=telegraf-otlp.crunchtools.com.service \
+    --memory=128m \
+    --memory-swap=128m \
+    --rm \
+    --name telegraf-otlp.crunchtools.com \
+    --network crunchtools \
+    --network-alias otlp \
+    --read-only \
+    --tmpfs /tmp \
+    --cap-drop=all \
+    --security-opt no-new-privileges \
+    --env-file /srv/telegraf-otlp.crunchtools.com/config/telegraf-otlp.env \
+    -v /srv/telegraf-otlp.crunchtools.com/config/etc:/etc/telegraf:ro,Z \
+    quay.io/crunchtools/tig:latest telegraf
+ExecStop=/usr/bin/podman stop -t 10 telegraf-otlp.crunchtools.com
+ExecStopPost=/usr/bin/podman rm -f telegraf-otlp.crunchtools.com
+
+[Install]
+WantedBy=multi-user.target

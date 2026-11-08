@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A Trentina dashboard: gateway traffic and OpenRouter spend in one place
+  (RT #1544).** Calls by outcome, profile and backend; detections by layer;
+  the most-flagged tools; p50 and p95 duration; egress tunnels; failed model
+  calls; and OpenRouter spend and tokens per day by model and by agent key,
+  today's spend and the credit balance.
+- `telegraf-otlp`: a second Telegraf on the `crunchtools` bridge that receives
+  Trentina's call traces as OTLP/HTTP JSON and writes `trentina_calls`. Its
+  own unit, env example and Nagios checks.
+- `openrouter_usage.py`, an exec collector for OpenRouter's analytics, keys
+  and credits APIs, run every 15 minutes from the host Telegraf. It needs
+  `OPENROUTER_MANAGEMENT_KEY` and reports `openrouter_collector up=0` without
+  it.
+
 ## [0.5.0] - 2026-11-08
 
 ### Fixed

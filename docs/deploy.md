@@ -1,12 +1,13 @@
 # Deploy
 
-Four containers, each with its own directory on the host (constitution XIV).
+Five containers, each with its own directory on the host (constitution XIV).
 
 | Container | Host directory | Published |
 |-----------|----------------|-----------|
 | `influxdb.crunchtools.com` | `/srv/influxdb.crunchtools.com/{config,data}` | `127.0.0.1:8099` |
 | `grafana.crunchtools.com` | `/srv/grafana.crunchtools.com/{config,data}` | `127.0.0.1:8098` |
 | `telegraf.crunchtools.com` | `/srv/telegraf.crunchtools.com/config` | none (host network) |
+| `telegraf-otlp.crunchtools.com` | `/srv/telegraf-otlp.crunchtools.com/config` | none (`crunchtools` bridge, alias `otlp`, port 4318) |
 | `mcp-grafana` | `/srv/mcp-grafana.crunchtools.com/config` | `127.0.0.1:8029` |
 
 Inside each `config/`: `etc/` is mounted read-only into the container,
@@ -21,13 +22,18 @@ mounted), and `<name>.service` is a copy of the installed unit.
 2. **Tokens.** Mint the write and read tokens (see [influxdb.md](influxdb.md)).
 3. **Telegraf.** Install `telegraf.conf` and a `db-containers.conf` to
    `config/etc/`, put the write token in `config/telegraf.env`, start the unit.
-4. **Grafana.** Install `deploy/grafana/` to `config/etc/`, put the read token,
+   For OpenRouter spend, add `OPENROUTER_MANAGEMENT_KEY` to `telegraf.env`.
+4. **OTLP receiver.** Install `deploy/telegraf-otlp/telegraf.conf` to
+   `config/etc/`, write `config/telegraf-otlp.env` from the example (the write
+   token and a generated receiver password), start the unit. Point Trentina at
+   it with the three settings in the example.
+5. **Grafana.** Install `deploy/grafana/` to `config/etc/`, put the read token,
    admin password and alert webhook URL in `config/grafana.env`, start
    the unit.
-5. **Proxy.** Add a virtual host forwarding to `127.0.0.1:8098`.
-6. **MCP.** Create a Viewer service account in Grafana, put its token in
+6. **Proxy.** Add a virtual host forwarding to `127.0.0.1:8098`.
+7. **MCP.** Create a Viewer service account in Grafana, put its token in
    `config/mcp-grafana.env`, start the unit, add the backend to the gateway.
-7. **Monitoring.** Install `deploy/nagios/tig.cfg` (self-contained: it joins
+8. **Monitoring.** Install `deploy/nagios/tig.cfg` (self-contained: it joins
    the hostgroups and NRPE pool servicegroups itself) and the commands in
    `nrpe-commands.cfg`. The `check_tig_freshness.sh` and `check_tig_trends.sh` plugins ship in
    `crunchtools/nagios-agent`.
@@ -61,6 +67,7 @@ metric was missing.
 | influxdb | 768m |
 | grafana | 1g (`GOMEMLIMIT=600MiB`) |
 | telegraf | 384m |
+| telegraf-otlp | 128m |
 | mcp-grafana | 128m |
 
 Grafana is a Go program and the Go runtime does not read the container's
