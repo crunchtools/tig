@@ -92,6 +92,47 @@ check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$?
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
 
+# RT#1567: the exec commands in the shipped config are flat strings, because
+# telegraf 1.38.4 rejects the nested ["prog", "arg"] form and fails the whole
+# config file on it. That leaves telegraf responsible for splitting "script arg"
+# into argv. If it ever stopped doing that, ctr_db_status.py would not run and
+# the database counters would disappear with nothing wrong in the data -- the
+# same silent shape as the bug this release fixes.
+#
+# So assert the argument actually arrives, rather than that the config parses:
+# point the script at a config naming one container that does not exist, and
+# require that name back in the output. If the argument were lost the script
+# would read its default config instead and never mention it. A command that
+# telegraf cannot split fails with "fork/exec ...: no such file or directory"
+# and emits nothing at all.
+exec_command_string_reaches_argv() {
+    local dir out
+    dir="$(mktemp -d)"
+    chmod 755 "$dir"
+    printf 'probe-not-a-container mariadb\n' > "$dir/db-probe.conf"
+    cat > "$dir/probe.conf" <<'PROBE'
+[agent]
+  interval = "10s"
+  omit_hostname = true
+[[inputs.exec]]
+  commands = ["/usr/local/libexec/telegraf/ctr_db_status.py /etc/telegraf/db-probe.conf"]
+  timeout = "20s"
+  data_format = "influx"
+PROBE
+    chmod 644 "$dir/db-probe.conf" "$dir/probe.conf"
+    # ,Z relabels for SELinux: these fixtures are created outside the repo, so
+    # without it the container cannot read them and the test fails for the wrong
+    # reason. Both podman and docker accept the flag; it is a no-op where
+    # SELinux is not enforcing.
+    out="$($RUNTIME run --rm \
+        -v "$dir/db-probe.conf:/etc/telegraf/db-probe.conf:ro,Z" \
+        -v "$dir/probe.conf:/etc/telegraf/probe.conf:ro,Z" \
+        --entrypoint telegraf "$IMAGE" --config /etc/telegraf/probe.conf --test 2>&1)"
+    rm -rf "$dir"
+    contains "db_collector,container=probe-not-a-container up=0i" <<<"$out"
+}
+check "exec command string is split into argv" exec_command_string_reaches_argv
+
 echo "=== Runtime tests ==="
 
 $RUNTIME network create "$NET" >/dev/null
