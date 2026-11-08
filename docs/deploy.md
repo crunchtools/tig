@@ -45,7 +45,7 @@ The `tig` units carry `io.containers.autoupdate=registry` and follow `latest`.
 | Container | Cap |
 |-----------|-----|
 | influxdb | 768m |
-| grafana | 512m (`GOMEMLIMIT=400MiB`) |
+| grafana | 1g (`GOMEMLIMIT=600MiB`) |
 | telegraf | 384m |
 | mcp-grafana | 128m |
 
@@ -54,5 +54,11 @@ memory limit: with the default collector setting its heap may grow to twice
 the live data before a collection runs. Idle at 150-270 MB, it reached the
 512 MB cap and was OOM-killed while a dashboard was open, then fell back to
 300 MB on its own once the dashboard was closed. `GOMEMLIMIT` in the unit
-makes the runtime collect before the cap. Keep it at about 80% of `--memory`
-if the cap changes.
+makes the runtime collect before the cap.
+
+Size `GOMEMLIMIT` to the working set and `--memory` to the headroom above it,
+not the other way round. At 80% of the cap the steady state sits permanently
+against Nagios's 85% container-memory warning, which is what 512m with
+`GOMEMLIMIT=400MiB` did: 443 MB of 512 MB, warning, with nothing actually
+wrong. 1g with `GOMEMLIMIT=600MiB` leaves Go half again as much heap as it was
+measured using and still reports around 60%.
