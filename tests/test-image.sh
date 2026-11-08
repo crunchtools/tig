@@ -86,21 +86,19 @@ check "unknown role exits 64"    sh -c "$RUNTIME run --rm $IMAGE bogus; test \$?
 check "fd walker emits line protocol" \
     sh -c "$RUNTIME run --rm --entrypoint /usr/local/libexec/telegraf/fd_types.py $IMAGE | grep -Eq '^fd_types_total files=[0-9]+i,'"
 
-# RT#1567: the exec commands in the shipped config are flat strings, the one
-# form that loads on both 1.38.4 and 1.40.x -- the nested ["prog", "arg"] form
-# fails the whole config file on anything older than 1.39. That leaves telegraf
-# responsible for splitting "script arg"
-# into argv. If it ever stopped doing that, ctr_db_status.py would not run and
-# the database counters would disappear with nothing wrong in the data -- the
-# same silent shape as the bug this release fixes.
+# RT#1567, RT#1598: the exec commands in the shipped config are nested
+# ["prog", "arg"] arrays. The flat string form telegraf used to want is
+# deprecated since 1.39.0 and removed in 1.45.0, and the array is what carries
+# ctr_db_status.py its config path. If that argument were ever lost the script
+# would silently read its default config, the database counters would go to a
+# container nobody asked about, and nothing in the data would look wrong -- the
+# same silent shape as the bug RT#1567 chased.
 #
 # So assert the argument actually arrives, rather than that the config parses:
 # point the script at a config naming one container that does not exist, and
 # require that name back in the output. If the argument were lost the script
-# would read its default config instead and never mention it. A command that
-# telegraf cannot split fails with "fork/exec ...: no such file or directory"
-# and emits nothing at all.
-exec_command_string_reaches_argv() {
+# would read its default config instead and never mention it.
+exec_command_argument_reaches_argv() {
     local dir out
     dir="$(mktemp -d)"
     chmod 755 "$dir"
@@ -110,7 +108,7 @@ exec_command_string_reaches_argv() {
   interval = "10s"
   omit_hostname = true
 [[inputs.exec]]
-  commands = ["/usr/local/libexec/telegraf/ctr_db_status.py /etc/telegraf/db-probe.conf"]
+  commands = [["/usr/local/libexec/telegraf/ctr_db_status.py", "/etc/telegraf/db-probe.conf"]]
   timeout = "20s"
   data_format = "influx"
 PROBE
@@ -134,7 +132,7 @@ PROBE
     printf '%s\n' "$out"
     return 1
 }
-check "exec command string is split into argv" exec_command_string_reaches_argv
+check "exec command argument reaches argv" exec_command_argument_reaches_argv
 
 echo "=== Runtime tests ==="
 

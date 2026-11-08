@@ -21,6 +21,14 @@ All notable changes to this project are documented here. The format follows
   same constraint. Weekly rebuilds pick up telegraf patch releases again, which
   means a telegraf CVE no longer needs a hand edit. Upstream, unchanged and not
   waited on: containers/podman#30149.
+- **`inputs.exec` commands are nested `["prog", "arg"]` arrays again.** The flat
+  `"prog arg"` string was forced by the 1.38.4 pin, which rejected arrays. With
+  the pin gone the array is the only correct form: telegraf deprecated the
+  string in 1.39.0 and removes it in 1.45.0, and on 1.40.3 every flat command
+  logs a deprecation warning — which the config-load test, correctly, fails on.
+  The argv assertion in `tests/test-image.sh` is kept and retargeted: it still
+  proves `ctr_db_status.py` receives its config path, which is the part that
+  would fail silently.
 
 ## [0.6.0] - 2026-11-08
 
