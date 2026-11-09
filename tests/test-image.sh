@@ -296,11 +296,13 @@ echo "=== Trentina dashboard (every shipped query runs against test data) ==="
 dashboard_queries_run() {
     python3 - "$REPO/deploy/grafana/dashboards/trentina.json" <<'PY' > "$REPO/.trentina-queries.txt"
 import json, sys
-for panel in json.load(open(sys.argv[1]))["panels"]:
+dashboard = json.load(open(sys.argv[1]))
+# The dashboard is crunchtools/trentina's portable copy: the bucket is a
+# dashboard variable, filled here from its own default, as Grafana fills it.
+bucket = next(v for v in dashboard["templating"]["list"] if v["name"] == "bucket")["query"]
+for panel in dashboard["panels"]:
     for target in panel["targets"]:
-        # The dashboard is crunchtools/trentina's portable copy: the bucket is
-        # a dashboard variable, filled here as Grafana fills it.
-        query = target["query"].replace("${bucket}", "telegraf")
+        query = target["query"].replace("${bucket}", bucket)
         print(json.dumps({"title": panel["title"], "query": query}))
 PY
     local failed=0 title query flux out
@@ -336,6 +338,13 @@ d = json.load(open(sys.argv[1]))
 assert "Source: crunchtools/trentina contrib/grafana" in d["description"], d["description"]
 assert {v["name"] for v in d["templating"]["list"]} == {"datasource", "bucket"}
 assert all(p.get("description") for p in d["panels"]), "every panel has a tooltip"
+variables = {v["name"]: v for v in d["templating"]["list"]}
+assert variables["bucket"]["query"] == "telegraf", "our bucket is the default"
+assert variables["datasource"]["type"] == "datasource" and variables["datasource"]["query"] == "influxdb"
+for p in d["panels"]:
+    sources = [p["datasource"]] + [t["datasource"] for t in p["targets"]]
+    assert all(s == {"type": "influxdb", "uid": "${datasource}"} for s in sources), p["title"]
+    assert all('from(bucket: "${bucket}")' in t["query"] for t in p["targets"]), p["title"]
 PY
 }
 check "Trentina dashboard is the shared trentina copy" trentina_dashboard_is_the_shared_copy
