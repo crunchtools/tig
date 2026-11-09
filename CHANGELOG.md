@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-11-08
+## [0.8.0] - 2026-11-09
 
 ### Changed
 
@@ -20,6 +20,8 @@ All notable changes to this project are documented here. The format follows
   dashboard shows the new name from the switch on. Operators: move the `/srv`
   directories and rename the env files; point `TRENTINA_OTLP_ENDPOINT` at
   `http://telegraf-receiver:4318`.
+
+## [0.7.0] - 2026-11-08
 
 ### Changed
 
