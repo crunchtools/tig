@@ -1,4 +1,6 @@
 [Unit]
+Requires=srv-secrets@influxdb.crunchtools.com.service
+After=srv-secrets@influxdb.crunchtools.com.service
 Description=Podman container - influxdb.crunchtools.com (InfluxDB 2.x time-series database)
 Documentation=https://github.com/crunchtools/tig
 Wants=network-online.target
@@ -33,7 +35,7 @@ ExecStart=/usr/bin/podman run \
     --network crunchtools \
     --network-alias influxdb \
     -p 127.0.0.1:8099:8086 \
-    --env-file /srv/influxdb.crunchtools.com/config/influxdb.env \
+    --env-file /run/srv-secrets/influxdb.crunchtools.com/influxdb.env \
     -v /srv/influxdb.crunchtools.com/config/etc:/etc/influxdb:ro,Z \
     -v /srv/influxdb.crunchtools.com/data:/var/lib/influxdb2:Z \
     quay.io/crunchtools/tig:latest influxd

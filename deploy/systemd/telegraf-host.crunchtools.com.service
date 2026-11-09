@@ -1,4 +1,6 @@
 [Unit]
+Requires=srv-secrets@telegraf-host.crunchtools.com.service
+After=srv-secrets@telegraf-host.crunchtools.com.service
 Description=Podman container - telegraf-host.crunchtools.com (Telegraf host and container collector)
 Documentation=https://github.com/crunchtools/tig
 Wants=network-online.target influxdb.crunchtools.com.service
@@ -42,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --cap-add SYS_PTRACE \
     --cap-add DAC_READ_SEARCH \
     --security-opt label=disable \
-    --env-file /srv/telegraf-host.crunchtools.com/config/telegraf-host.env \
+    --env-file /run/srv-secrets/telegraf-host.crunchtools.com/telegraf-host.env \
     -v /srv/telegraf-host.crunchtools.com/config/etc:/etc/telegraf:ro \
     -v /:/hostfs:ro \
     -v /run/podman/podman.sock:/run/podman/podman.sock \
