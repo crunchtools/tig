@@ -1,4 +1,6 @@
 [Unit]
+Requires=srv-secrets@telegraf-receiver.crunchtools.com.service
+After=srv-secrets@telegraf-receiver.crunchtools.com.service
 Description=Podman container - telegraf-receiver.crunchtools.com (OTLP receiver for Trentina traces)
 Documentation=https://github.com/crunchtools/tig
 Wants=network-online.target influxdb.crunchtools.com.service
@@ -29,7 +31,7 @@ ExecStart=/usr/bin/podman run \
     --tmpfs /tmp \
     --cap-drop=all \
     --security-opt no-new-privileges \
-    --env-file /srv/telegraf-receiver.crunchtools.com/config/telegraf-receiver.env \
+    --env-file /run/srv-secrets/telegraf-receiver.crunchtools.com/telegraf-receiver.env \
     -v /srv/telegraf-receiver.crunchtools.com/config/etc:/etc/telegraf:ro,Z \
     quay.io/crunchtools/tig:latest telegraf
 ExecStop=/usr/bin/podman stop -t 10 telegraf-receiver.crunchtools.com

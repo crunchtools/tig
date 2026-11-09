@@ -1,4 +1,6 @@
 [Unit]
+Requires=srv-secrets@grafana.crunchtools.com.service
+After=srv-secrets@grafana.crunchtools.com.service
 Description=Podman container - grafana.crunchtools.com (Grafana dashboards and trend alerting)
 Documentation=https://github.com/crunchtools/tig
 Wants=network-online.target influxdb.crunchtools.com.service
@@ -32,7 +34,7 @@ ExecStart=/usr/bin/podman run \
     --network crunchtools \
     --network-alias grafana \
     -p 127.0.0.1:8098:3000 \
-    --env-file /srv/grafana.crunchtools.com/config/grafana.env \
+    --env-file /run/srv-secrets/grafana.crunchtools.com/grafana.env \
     -e GOMEMLIMIT=600MiB \
     -v /srv/grafana.crunchtools.com/config/etc:/etc/grafana:ro,Z \
     -v /srv/grafana.crunchtools.com/data:/var/lib/grafana:Z \

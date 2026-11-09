@@ -1,4 +1,6 @@
 [Unit]
+Requires=srv-secrets@mcp-grafana.crunchtools.com.service
+After=srv-secrets@mcp-grafana.crunchtools.com.service
 Description=Podman container - mcp-grafana.crunchtools.com (read-only MCP access to Grafana)
 Documentation=https://github.com/crunchtools/tig
 Wants=network-online.target grafana.crunchtools.com.service
@@ -28,7 +30,7 @@ ExecStart=/usr/bin/podman run -d --sdnotify=conmon \
     --name mcp-grafana \
     --network crunchtools \
     -p 127.0.0.1:8029:8029 \
-    --env-file /srv/mcp-grafana.crunchtools.com/config/mcp-grafana.env \
+    --env-file /run/srv-secrets/mcp-grafana.crunchtools.com/mcp-grafana.env \
     docker.io/grafana/mcp-grafana:1.6.3 \
     -t streamable-http \
     --address 0.0.0.0:8029 \
