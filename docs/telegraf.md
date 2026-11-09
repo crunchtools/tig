@@ -69,3 +69,8 @@ It runs apart from `telegraf-host` because it answers requests from other
 containers: no host network, PID namespace, socket, mounts or capabilities.
 The points keep the span's nanosecond timestamp, so two calls with the same
 tags never overwrite each other. The Trentina dashboard reads them.
+
+The dashboard (`deploy/grafana/dashboards/trentina.json`) is a copy of
+`contrib/grafana/trentina-dashboard.json` in crunchtools/trentina: edit it
+there and copy it here. How to read every panel is in trentina's
+`docs/grafana-dashboard.md`.

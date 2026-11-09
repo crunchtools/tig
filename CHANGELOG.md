@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The Trentina dashboard is now crunchtools/trentina's portable copy
+  (`contrib/grafana/trentina-dashboard.json`, trentina#770): a tooltip on
+  every panel, the data source and bucket as dashboard variables, and stat
+  panels that no longer turn red above 80. Edit it in trentina and copy it
+  here; `tests/test-image.sh` checks the copy's marker.
+
 ## [0.8.0] - 2026-11-09
 
 ### Changed

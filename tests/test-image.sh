@@ -298,7 +298,10 @@ dashboard_queries_run() {
 import json, sys
 for panel in json.load(open(sys.argv[1]))["panels"]:
     for target in panel["targets"]:
-        print(json.dumps({"title": panel["title"], "query": target["query"]}))
+        # The dashboard is crunchtools/trentina's portable copy: the bucket is
+        # a dashboard variable, filled here as Grafana fills it.
+        query = target["query"].replace("${bucket}", "telegraf")
+        print(json.dumps({"title": panel["title"], "query": query}))
 PY
     local failed=0 title query flux out
     while IFS= read -r entry; do
@@ -324,6 +327,18 @@ print("\n".join(imports + [head] + rest))
     return $failed
 }
 check "every Trentina dashboard query returns rows" dashboard_queries_run
+# trentina.json is a copy of crunchtools/trentina contrib/grafana/trentina-dashboard.json,
+# which is where it is edited; this catches a hand edit made here instead.
+trentina_dashboard_is_the_shared_copy() {
+    python3 - "$REPO/deploy/grafana/dashboards/trentina.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert "Source: crunchtools/trentina contrib/grafana" in d["description"], d["description"]
+assert {v["name"] for v in d["templating"]["list"]} == {"datasource", "bucket"}
+assert all(p.get("description") for p in d["panels"]), "every panel has a tooltip"
+PY
+}
+check "Trentina dashboard is the shared trentina copy" trentina_dashboard_is_the_shared_copy
 
 $RUNTIME run -d --name tig-test-grafana --network "$NET" \
     --user 1502:1502 --tmpfs /var/lib/grafana:exec,uid=1502,gid=1502 \
