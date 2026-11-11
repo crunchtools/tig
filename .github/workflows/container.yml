@@ -1,0 +1,36 @@
+name: Container
+
+# Build once, gate the digest, promote what was tested (container-image VII).
+# The gate is tests/test-image.sh: it runs all three roles (influxd, telegraf,
+# grafana) from the built digest and checks they work together.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  schedule:
+    - cron: "0 6 * * 1"  # Weekly Monday rebuild
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Blocking AI-slop gate, required by constitution XII.
+  gourmand:
+    name: Code Quality (Gourmand)
+    uses: crunchtools/gatehouse/.github/workflows/gourmand.yml@v0
+
+  container:
+    needs: gourmand  # a failed quality gate must not publish an image
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/tig
+      boot: command
+      boot-command: RUNTIME=podman bash tests/test-image.sh
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}

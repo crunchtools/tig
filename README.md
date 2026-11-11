@@ -50,9 +50,10 @@ the production units.
 
 ## Development
 
-Images are built only by GitHub Actions. A pull request builds the image and
-runs `tests/test-image.sh` against it; a merge to `main` pushes to Quay and
-GHCR. Gourmand and Gatehouse run as pre-commit hooks and in CI:
+Images are built only by GitHub Actions, once per change. A pull request builds
+the image, pushes it to Quay.io and runs `tests/test-image.sh` against that
+digest; the merge to `main` promotes the gated digest to `:main` without a
+rebuild, and a `v*` tag copies it to the version tags and `:latest`. Gourmand and Gatehouse run as pre-commit hooks and in CI:
 
 ```bash
 pre-commit install

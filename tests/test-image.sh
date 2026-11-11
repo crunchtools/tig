@@ -1,7 +1,7 @@
 #!/bin/bash
 # Smoke test for the tig image.
 #
-# Usage: RUNTIME=docker IMAGE=tig:test ./tests/test-image.sh
+# Usage: IMAGE=localhost/tig:gate ./tests/test-image.sh
 #
 # Static: every role's binary and script is present and runnable.
 # Runtime: the three roles work together — influxd bootstraps, Telegraf writes
@@ -136,12 +136,12 @@ echo "=== Runtime tests ==="
 $RUNTIME network create "$NET" >/dev/null
 
 $RUNTIME run -d --name tig-test-influxdb --network "$NET" --network-alias influxdb \
-    --user 1501:1501 --tmpfs /var/lib/influxdb2:uid=1501,gid=1501 \
+    --user 1501:1501 --tmpfs /var/lib/influxdb2:mode=1777 \
     -e HOME=/var/lib/influxdb2 \
     -e INFLUXDB_INIT_USERNAME=admin -e INFLUXDB_INIT_PASSWORD=test-password-123 \
     -e INFLUXDB_INIT_ORG=crunchtools -e INFLUXDB_INIT_BUCKET=telegraf \
     -e INFLUXDB_INIT_ADMIN_TOKEN=test-admin-token \
-    -v "$REPO/deploy/influxdb/config.yml:/etc/influxdb/config.yml:ro" \
+    -v "$REPO/deploy/influxdb/config.yml:/etc/influxdb/config.yml:ro,z" \
     "$IMAGE" influxd >/dev/null
 
 check "influxd becomes healthy" \
@@ -170,7 +170,7 @@ full_config_loads_cleanly() {
     output="$($RUNTIME run --rm \
         -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
         -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN=unused \
-        -v "$REPO/deploy/telegraf-host/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+        -v "$REPO/deploy/telegraf-host/telegraf.conf:/etc/telegraf/telegraf.conf:ro,z" \
         "$IMAGE" telegraf --test 2>&1 || true)"
     if grep -E 'loading config file .* failed|DeprecationWarning' <<<"$output"; then
         return 1
@@ -184,7 +184,7 @@ check "telegraf writes with the shipped config" \
     $RUNTIME run --rm --network "$NET" \
         -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
         -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN="$WRITE_TOKEN" \
-        -v "$REPO/deploy/telegraf-host/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+        -v "$REPO/deploy/telegraf-host/telegraf.conf:/etc/telegraf/telegraf.conf:ro,z" \
         "$IMAGE" telegraf --input-filter cpu:mem:swap:system:exec --once
 
 check "read token can query the point back" \
@@ -259,11 +259,11 @@ $RUNTIME run -d --name tig-test-otlp --network "$NET" --network-alias telegraf-r
     -e INFLUX_URL=http://influxdb:8086 -e INFLUX_ORG=crunchtools \
     -e INFLUX_BUCKET=telegraf -e INFLUX_TOKEN="$WRITE_TOKEN" \
     -e OTLP_USERNAME=trentina -e OTLP_PASSWORD=otlp-test-password \
-    -v "$REPO/deploy/telegraf-receiver/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+    -v "$REPO/deploy/telegraf-receiver/telegraf.conf:/etc/telegraf/telegraf.conf:ro,z" \
     "$IMAGE" telegraf >/dev/null
 
 otlp_post() {
-    $RUNTIME run --rm --network "$NET" -v "$REPO/tests/fixtures:/fixtures:ro" --entrypoint curl "$IMAGE" \
+    $RUNTIME run --rm --network "$NET" -v "$REPO/tests/fixtures:/fixtures:ro,z" --entrypoint curl "$IMAGE" \
         -s -o /dev/null -w '%{http_code}' -m 10 "$@" \
         -H 'Content-Type: application/json' --data-binary @/fixtures/otlp-trentina.json \
         http://telegraf-receiver:4318/v1/traces
@@ -350,11 +350,11 @@ PY
 check "Trentina dashboard is the shared trentina copy" trentina_dashboard_is_the_shared_copy
 
 $RUNTIME run -d --name tig-test-grafana --network "$NET" \
-    --user 1502:1502 --tmpfs /var/lib/grafana:exec,uid=1502,gid=1502 \
+    --user 1502:1502 --tmpfs /var/lib/grafana:exec,mode=1777 \
     -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=test-password-123 \
     -e INFLUXDB_TOKEN="$READ_TOKEN" -e ALERT_WEBHOOK_URL=http://alert-sink:9000/alert \
     -e ALERT_WEBHOOK_TOKEN=sink-token \
-    -v "$REPO/deploy/grafana:/etc/grafana:ro" \
+    -v "$REPO/deploy/grafana:/etc/grafana:ro,z" \
     "$IMAGE" grafana >/dev/null
 
 grafana_api() {
@@ -459,10 +459,10 @@ echo "=== Alert webhook (shipped contact point, sample alert) ==="
 # renders the payload template from the provisioned contact point and POSTs it,
 # so this checks the template that ships, not a copy.
 $RUNTIME run -d --name tig-test-sink --network "$NET" --network-alias alert-sink \
-    -v "$REPO/tests:/tests:ro" --entrypoint python3 "$IMAGE" /tests/webhook_sink.py 9000 >/dev/null
+    -v "$REPO/tests:/tests:ro,z" --entrypoint python3 "$IMAGE" /tests/webhook_sink.py 9000 >/dev/null
 
 send_sample_alert() {
-    $RUNTIME run --rm --network "$NET" -v "$REPO:/repo:ro" --entrypoint python3 "$IMAGE" -c '
+    $RUNTIME run --rm --network "$NET" -v "$REPO:/repo:ro,z" --entrypoint python3 "$IMAGE" -c '
 import base64, json, re, urllib.request
 text = open("/repo/deploy/grafana/provisioning/alerting/contact-points.yaml").read()
 # The payload template is the block scalar under "template: |-"; read it

@@ -4,7 +4,7 @@
 > **Ratified:** 2026-09-30
 > **Amended:** 2026-11-08
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.31.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.39.1
 > **Profile:** Container Image
 
 This file holds what is specific to tig. The fleet rules and the Container
@@ -17,8 +17,7 @@ One image, three roles: the Telegraf collector, the InfluxDB 2.x time-series
 database and the Grafana dashboards and trend alerting. Each container runs
 exactly one role, selected by the first argument to `/usr/local/bin/tig`. This
 is the graphing and rate-of-change layer next to Nagios, which stays the
-threshold alerting platform. Published to `quay.io/crunchtools/tig` and
-`ghcr.io/crunchtools/tig`.
+threshold alerting platform. Published to `quay.io/crunchtools/tig`.
 
 The roles are separate containers by design. The collector holds the Podman
 socket and the host PID namespace; Grafana answers requests from the internet.
