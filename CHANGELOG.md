@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-11
+
 ### Changed
 
 - The Trentina dashboard is now crunchtools/trentina's portable copy
