@@ -61,3 +61,6 @@ tests = ["tests/test_exec_inputs.py"]
 # semgrep: no in-repo rules, and the check exits 2 when .semgrep is absent
 # rather than scanning nothing and calling it a pass.
 skip = ["semgrep"]
+
+[tool.sdlc]
+repo-kinds = ["container-image"]
