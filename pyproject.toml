@@ -47,7 +47,7 @@ pythonpath = ["rootfs/usr/local/libexec/telegraf"]
 # The probe tests need the image's install path, so the gate runs them inside
 # the built image rather than on the host.
 [tool.sdlc.ci]
-checks = ["image", "image-tests"]
+checks = ["image", "image-tests", "gate-image", "boot-gate"]
 
 [tool.sdlc.ci.image]
 kind = "image-build"
@@ -57,6 +57,28 @@ kind = "pytest-in-image"
 mounts = ["tests"]
 tests = ["tests/test_exec_inputs.py"]
 
+# The boot gate: tests/test-image.sh's assertions, run inside the image this PR
+# builds. sdlc 0.15 does not enforce `[tool.sdlc.image] boot = "command"`
+# (crunchtools/sdlc#118), and a `command` check has one container, not the
+# three on a bridge network that test-image.sh drives, so tests/image-gate.sh
+# runs influxd, the OTLP receiver and Grafana side by side on loopback. The
+# container is the Containerfile plus `USER 1502` (tests/Containerfile.gate, a
+# full copy the gate checks for drift): a command container has no
+# capabilities, and Grafana's home is 0700 to that uid. A copy rather than
+# `FROM localhost/tig:sdlc`, because a build of another tag is in another lane
+# and may run before `image` has built it.
+# Not carried over: starting the upstream mcp-grafana image (a second
+# container), and influxd as uid 1501.
+[tool.sdlc.ci.gate-image]
+kind = "image-build"
+containerfile = "tests/Containerfile.gate"
+tag = "localhost/tig:gate"
+
+[tool.sdlc.ci.boot-gate]
+kind = "command"
+image = "localhost/tig:gate"
+argv = ["bash", "tests/image-gate.sh"]
+
 [tool.sdlc.push]
 # semgrep: no in-repo rules, and the check exits 2 when .semgrep is absent
 # rather than scanning nothing and calling it a pass.
@@ -64,3 +86,12 @@ skip = ["semgrep"]
 
 [tool.sdlc]
 repo-kinds = ["container-image"]
+
+[tool.sdlc.image]
+# Written by crunchtools/sdlc's scripts/convert_repo.py: moved from the workflows.
+image = "quay.io/crunchtools/tig"
+# No HEALTHCHECK and no systemd: one image, three roles chosen by argument, so
+# no single boot profile fits. The boot gate is the [tool.sdlc.ci] boot-gate
+# check, run against this PR's built image.
+boot = "none"
+boot-none-reason = "one image, three roles chosen by argument, no HEALTHCHECK and no systemd; the boot gate is the [tool.sdlc.ci] boot-gate check against this PR's built image"
