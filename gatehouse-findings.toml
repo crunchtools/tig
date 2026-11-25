@@ -1,0 +1,17 @@
+# Gatehouse findings judged by hand; each carries its reason.
+
+[[findings]]
+agent = "constitution"
+category = "constitution"
+file = "tests/Containerfile.gate"
+evidence = "FROM registry.access.redhat.com/ubi10/ubi-minimal"
+status = "not-a-bug"
+reason = "tests/Containerfile.gate is a verbatim copy of the Containerfile plus USER 1502, and tests/image-gate.sh fails the boot gate on any drift; the base reference is the production Containerfile's, unchanged here, so pinning it belongs there and the copy follows."
+
+[[findings]]
+agent = "constitution"
+category = "constitution"
+file = "tests/Containerfile.gate"
+evidence = "ARG TELEGRAF_VERSION=1.40.*\nARG INFLUXDB_VERSION=2.9.*\nARG INFLUX_CLI_VERSION=2.8.*\nARG GRAFANA_VERSION=13.2.*"
+status = "not-a-bug"
+reason = "tests/Containerfile.gate is a verbatim copy of the Containerfile plus USER 1502, and tests/image-gate.sh fails the boot gate on any drift; these version globs are the production Containerfile's, unchanged here, so tightening them belongs there and the copy follows."
